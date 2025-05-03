@@ -1,2 +1,3 @@
-# LoadFirstReplaceLater
-Load First, Replace Later: Progressive Weight Loading for Faster Initial Inference
+# Progressive Weight Loading
+
+Infer First, Load Later: Progressive Model Weight Loading for Faster Initial Inference
