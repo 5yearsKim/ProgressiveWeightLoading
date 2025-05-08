@@ -1,0 +1,12 @@
+venv
+.venv
+__pycache__
+*.pyc
+
+.ruff_cache
+.mypy_cache
+.vscode/
+*.egg-info
+
+ckpts/
+data/
