@@ -11,3 +11,5 @@ transformers
 pillow
 datasets[vision]
 accelerate
+
+mlflow
