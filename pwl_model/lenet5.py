@@ -30,7 +30,8 @@ class LeNet5Config(PretrainedConfig):
 
 
 class LeNet5PreTrainedModel(PreTrainedModel):
-    pass
+    config_class = LeNet5Config
+    base_model_prefix = "lenet5"
 
 
 class LeNet5Model(LeNet5PreTrainedModel):
