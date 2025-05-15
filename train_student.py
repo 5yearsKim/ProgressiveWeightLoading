@@ -1,6 +1,6 @@
 import argparse
-
-from pwl_model.resnet import ResNetFeatureDistiller
+from typing import Literal
+from pwl_model.feature_distiller import FeatureDistiller
 from transformers import (
     ResNetForImageClassification,
     ResNetConfig,
@@ -13,18 +13,27 @@ from datasets import load_dataset
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Distill a ResNet teacher into a smaller ResNet student."
+        description="Distill a teacher into a smaller student."
+    )
+
+    parser.add_argument(
+        "--model_type",
+        type=str
+        choices=['resnet', 'lenet'],
+        default='lenet',
+        help="Model type",
     )
     parser.add_argument(
         "--teacher_path",
         type=str,
-        default="./ckpts/resnet/resnet18",
+        default="./ckpts/lenet-cifar10/archives/teacher-14858",
         help="Path or model identifier of the pretrained teacher",
     )
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="zh-plus/tiny-imagenet",
+        choices=["zh-plus/tiny-imagenet", "uoft-cs/cifar10"]
+        default="uoft-cs/cifar10",
         help="🤗 dataset identifier (e.g. 'zh-plus/tiny-imagenet')",
     )
     parser.add_argument(
@@ -68,41 +77,68 @@ class DistilTrainer(Trainer):
 def main():
     args = parse_args()
 
-    # 1. Load teacher & build student config
-    teacher = ResNetForImageClassification.from_pretrained(args.teacher_path)
-    teacher_cfg = teacher.config
+    if args.model_type == 'resnet':
+        from transformers import (
+            ResNetForImageClassification,
+            ResNetConfig
+        )
 
-    student_cfg = ResNetConfig(**teacher_cfg.to_dict())
-    # halve the depths of each stage
-    student_cfg.depths = [max(1, d // 2) for d in student_cfg.depths]
-    student = ResNetForImageClassification(student_cfg)
+        # 1. Load teacher & build student config
+        teacher = ResNetForImageClassification.from_pretrained(args.teacher_path)
+        teacher_cfg = teacher.config
 
-    # 2. Preprocessor (to get pixel_values)
-    processor = AutoImageProcessor.from_pretrained(args.teacher_path)
+        student_cfg = ResNetConfig(**teacher_cfg.to_dict())
+        student_cfg.depths = [max(1, d // 2) for d in student_cfg.depths]
+        student = ResNetForImageClassification(student_cfg)
 
-    def preprocess(batch):
-        inputs = processor(batch["image"], return_tensors="pt")
-        batch["pixel_values"] = inputs["pixel_values"]
-        return batch
+        processor = AutoImageProcessor.from_pretrained(args.teacher_path)
 
-    # 3. Load & preprocess data
-    train_ds, val_ds = load_dataset(
+        def preprocess(batch):
+            inputs = processor(batch["image"], return_tensors="pt")
+            batch["pixel_values"] = inputs["pixel_values"]
+            return batch
+    elif args.model_type == 'lenet'
+        from pwl_model.lenet5 import LeNet5
+        teacher = LeNet5().from_
+        student = LeNet5()
+
+        transform = T.Compose([
+            T.ToTensor(),                          # [0,1]
+            T.Lambda(lambda t: t - 0.5),           # → roughly [–0.5, +0.5]
+        ])
+
+        def preprocess(batch):
+            tensor_list = []
+            for arr in batch["img"]:
+                img = arr.convert("RGB")
+                tensor_list.append(transform(img))
+            batch["pixel_values"] = torch.stack(tensor_list)
+            batch["labels"]      = batch["label"]
+            return batch
+
+
+    else:
+        raise ValueError(f'{args.model_type} not defined')
+
+
+    ds = load_dataset(
         args.dataset_name, split=["train[:100]", "valid[:100]"]
     )
-    train_ds = train_ds.map(
+    ds_train = ds['train'].map(
         preprocess,
         batched=True,
         batch_size=32,
-        remove_columns=["image"],
+        remove_columns=["img"],
     )
-    # rename for Trainer
-    train_ds = train_ds.rename_column("label", "labels")
-    train_ds.set_format(type="torch", columns=["pixel_values", "labels"])
+    ds_val = ds['test'].map(
+        preprocess,
+        batched=True,
+        batch_size=32,
+        remove_columns=["image", 'img', 'label'], # 'pixel_values' and 'labels' goes to input
+    )
+    
+    distiller = FeatureDistiller(student, teacher)
 
-    # 4. Prepare distiller
-    distiller = ResNetFeatureDistiller(student, teacher)
-
-    # 5. TrainingArguments via argparse
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.per_device_train_batch_size,
@@ -117,7 +153,6 @@ def main():
         save_steps=500,
     )
 
-    # 6. Trainer + MLflow callback
     trainer = DistilTrainer(
         model=distiller,
         args=training_args,
@@ -125,7 +160,6 @@ def main():
         callbacks=[MLflowCallback()],
     )
 
-    # 7. Launch!
     trainer.train()
 
 
