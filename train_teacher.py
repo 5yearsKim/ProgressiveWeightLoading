@@ -6,13 +6,21 @@ from datasets import load_dataset
 from torchvision import transforms as T
 
 
-from pwl_model.lenet5 import LeNet5
+from pwl_model.lenet5 import LeNet5ForImageClassification, LeNet5Config
 import mlflow
 
-mlflow.set_experiment('lenet5-cifar10')
+RESUME_FROM_CHECKPOINT=False
+EPOCHS=20
+LEARNING_RATE=2e-3
+BATCH_SIZE=128
 
 device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model     = LeNet5().to(device) 
+
+mlflow.set_experiment('lenet5-cifar10')
+mlflow.log_param("device", str(device))
+
+config = LeNet5Config()
+model     = LeNet5ForImageClassification(config).to(device) 
 
 transform = T.Compose([
     T.ToTensor(),                          # [0,1]
@@ -33,8 +41,8 @@ def preprocess(batch):
 ds = load_dataset("uoft-cs/cifar10")
 
 print("processing train set")
-# ds_train = ds["train"].map(
-ds_train = ds["train"].select(range(1000)).map(
+ds_train = ds["train"].map(
+# ds_train = ds["train"].select(range(1000)).map(
     preprocess,
     batched=True,
     batch_size=64,
@@ -42,8 +50,8 @@ ds_train = ds["train"].select(range(1000)).map(
 )
 
 print("processing test set")
-# ds_test = ds["test"].map(
-ds_test = ds["test"].select(range(100)).map(
+ds_test = ds["test"].map(
+# ds_test = ds["test"].select(range(100)).map(
     preprocess,
     batched=True,
     batch_size=64,
@@ -61,10 +69,10 @@ def compute_metrics(p):
 # training args
 training_args = TrainingArguments(
     output_dir="./ckpts/lenet-cifar10",
-    per_device_train_batch_size=64,
-    per_device_eval_batch_size=64,
-    learning_rate=1e-3,
-    num_train_epochs=10,
+    per_device_train_batch_size=BATCH_SIZE,
+    per_device_eval_batch_size=BATCH_SIZE,
+    learning_rate=LEARNING_RATE,
+    num_train_epochs=EPOCHS,
     save_strategy="epoch",
     logging_strategy="epoch",
     eval_strategy="epoch",
@@ -88,4 +96,4 @@ trainer = Trainer(
     callbacks=[MLflowCallback()],
 )
 
-trainer.train()
+trainer.train(resume_from_checkpoint=RESUME_FROM_CHECKPOINT)
