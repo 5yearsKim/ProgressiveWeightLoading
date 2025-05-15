@@ -1,6 +1,6 @@
-from transformers import AutoImageProcessor, ResNetForImageClassification
 import torch
 from datasets import load_dataset
+from transformers import AutoImageProcessor, ResNetForImageClassification
 
 dataset = load_dataset("huggingface/cats-image")
 image = dataset["test"]["image"][0]
@@ -14,8 +14,8 @@ model = ResNetForImageClassification.from_pretrained(teacher_path)
 
 inputs = image_processor(image, return_tensors="pt")
 
-print('inputs')
-print(inputs['pixel_values'].shape)
+print("inputs")
+print(inputs["pixel_values"].shape)
 
 with torch.no_grad():
     logits = model(**inputs).logits

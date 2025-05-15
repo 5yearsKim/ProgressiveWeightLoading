@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
-from transformers import (
-    PreTrainedModel, PretrainedConfig,
-)
+from transformers import PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import (
-    ImageClassifierOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
-)
+    ImageClassifierOutputWithNoAttention)
+
 
 class LeNet5Config(PretrainedConfig):
     model_type = "lenet5"
@@ -15,8 +13,8 @@ class LeNet5Config(PretrainedConfig):
         self,
         in_channels: int = 3,
         num_labels: int = 10,
-        cnn_channels = [6, 16],
-        fc_sizes = [400, 120, 84],
+        cnn_channels=[6, 16],
+        fc_sizes=[400, 120, 84],
         **kwargs,
     ):
 
@@ -35,19 +33,24 @@ class LeNet5PreTrainedModel(PreTrainedModel):
     pass
 
 
-
 class LeNet5Model(LeNet5PreTrainedModel):
     def __init__(self, config: LeNet5Config) -> None:
         super().__init__(config)
-        self.conv1 = nn.Conv2d(config.in_channels, config.cnn_channels[0], kernel_size=5)
-        self.pool  = nn.AvgPool2d(kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(config.cnn_channels[0], config.cnn_channels[1], kernel_size=5)
-        self.fc1   = nn.Linear(config.fc_sizes[0], config.fc_sizes[1])
-        self.fc2   = nn.Linear(config.fc_sizes[1], config.fc_sizes[2])
+        self.conv1 = nn.Conv2d(
+            config.in_channels, config.cnn_channels[0], kernel_size=5
+        )
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(
+            config.cnn_channels[0], config.cnn_channels[1], kernel_size=5
+        )
+        self.fc1 = nn.Linear(config.fc_sizes[0], config.fc_sizes[1])
+        self.fc2 = nn.Linear(config.fc_sizes[1], config.fc_sizes[2])
 
         self.post_init()
 
-    def forward(self, pixel_values, labels=None) -> BaseModelOutputWithPoolingAndNoAttention:
+    def forward(
+        self, pixel_values, labels=None
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         x = torch.relu(self.conv1(pixel_values))
         x = self.pool(x)
         x = torch.relu(self.conv2(x))
@@ -62,9 +65,6 @@ class LeNet5Model(LeNet5PreTrainedModel):
         )
 
 
-
-
-
 class LeNet5ForImageClassification(LeNet5PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -74,12 +74,18 @@ class LeNet5ForImageClassification(LeNet5PreTrainedModel):
         self.num_labels = config.num_labels
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.fc_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Idntity(),
+            (
+                nn.Linear(config.fc_sizes[-1], config.num_labels)
+                if config.num_labels > 0
+                else nn.Idntity()
+            ),
         )
 
         self.post_init()
 
-    def forward(self, pixel_values: torch.FloatTensor, labels: torch.LongTensor|None=None):
+    def forward(
+        self, pixel_values: torch.FloatTensor, labels: torch.LongTensor | None = None
+    ):
         outputs = self.lenet(pixel_values)
 
         pooler_output = outputs.pooler_output
@@ -90,5 +96,4 @@ class LeNet5ForImageClassification(LeNet5PreTrainedModel):
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits = logits)
-    
+        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits)
