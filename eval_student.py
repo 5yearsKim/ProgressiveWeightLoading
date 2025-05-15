@@ -98,20 +98,17 @@ def main():
         ],  # 'pixel_values' and 'labels' goes to input
     )
 
-
-
-
     def compute_metrics(eval_pred):
         logits, labels = eval_pred
         preds = np.argmax(logits, axis=-1)
         return {"accuracy": (preds == labels).astype(np.float32).mean().item()}
 
     eval_args = TrainingArguments(
-        output_dir="./tmp_eval",           # not used beyond logging
+        output_dir="./tmp_eval",  # not used beyond logging
         per_device_eval_batch_size=args.batch_size,
         do_train=False,
         do_eval=True,
-        logging_strategy="no",             # you can silence logs if you like
+        logging_strategy="no",  # you can silence logs if you like
     )
 
     trainer = Trainer(
@@ -123,7 +120,6 @@ def main():
 
     metrics = trainer.evaluate()
     print(f"Evaluation results: {metrics}")
-
 
 
 if __name__ == "__main__":
