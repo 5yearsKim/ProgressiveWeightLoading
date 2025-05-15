@@ -4,8 +4,7 @@ import mlflow
 import numpy as np
 import torch
 from datasets import load_dataset
-from transformers import (AutoImageProcessor, Trainer,
-                          TrainingArguments)
+from transformers import AutoImageProcessor, Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
 
 from pwl_model.feature_distiller import FeatureDistiller

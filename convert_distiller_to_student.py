@@ -1,5 +1,6 @@
-import os
 import argparse
+import os
+
 import torch
 from safetensors.torch import load_file as safe_load
 
@@ -13,12 +14,12 @@ def parse_args():
     )
     parser.add_argument(
         "--distiller_ckpt",
-        default='./ckpts/lenet-cifar10/students/checkpoint-46890',
+        default="./ckpts/lenet-cifar10/students/checkpoint-46890",
         help="Path to the folder (or file) containing distiller pytorch_model.bin",
     )
     parser.add_argument(
         "--out_dir",
-        default='./ckpts/lenet-cifar10/students/converted_student',
+        default="./ckpts/lenet-cifar10/students/converted_student",
         help="Directory where the student-only checkpoint will be saved",
     )
     parser.add_argument(
@@ -29,7 +30,6 @@ def parse_args():
     )
     args = parser.parse_args()
     return args
-
 
 
 def main():
@@ -47,7 +47,7 @@ def main():
 
     # 2) Filter out only the student parameters
     student_sd = {
-        k[len("student."):]: v
+        k[len("student.") :]: v
         for k, v in distiller_sd.items()
         if k.startswith("student.")
     }
@@ -55,7 +55,7 @@ def main():
         raise ValueError("No keys found with prefix 'student.' – check your checkpoint")
 
     # 3) Instantiate a fresh student
-    config  = LeNet5Config(num_labels=args.num_labels)
+    config = LeNet5Config(num_labels=args.num_labels)
     student = LeNet5ForImageClassification(config)
 
     # 4) Load the filtered weights
@@ -67,6 +67,7 @@ def main():
     print(f"Saving student-only model to {args.out_dir} …")
     student.save_pretrained(args.out_dir)
     print("Done!")
+
 
 if __name__ == "__main__":
     main()
