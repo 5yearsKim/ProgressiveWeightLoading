@@ -1,31 +1,32 @@
+import mlflow
 import torch
 import torch.nn as nn
-from transformers import Trainer, TrainingArguments
-from transformers.integrations import MLflowCallback
 from datasets import load_dataset
 from torchvision import transforms as T
+from transformers import Trainer, TrainingArguments
+from transformers.integrations import MLflowCallback
 
+from pwl_model.lenet5 import LeNet5Config, LeNet5ForImageClassification
 
-from pwl_model.lenet5 import LeNet5ForImageClassification, LeNet5Config
-import mlflow
+RESUME_FROM_CHECKPOINT = False
+EPOCHS = 20
+LEARNING_RATE = 2e-3
+BATCH_SIZE = 128
 
-RESUME_FROM_CHECKPOINT=False
-EPOCHS=20
-LEARNING_RATE=2e-3
-BATCH_SIZE=128
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-mlflow.set_experiment('lenet5-cifar10')
+mlflow.set_experiment("lenet5-cifar10")
 mlflow.log_param("device", str(device))
 
 config = LeNet5Config()
-model     = LeNet5ForImageClassification(config).to(device) 
+model = LeNet5ForImageClassification(config).to(device)
 
-transform = T.Compose([
-    T.ToTensor(),                          # [0,1]
-    T.Lambda(lambda t: t - 0.5),           # → roughly [–0.5, +0.5]
-])
+transform = T.Compose(
+    [
+        T.ToTensor(),  # [0,1]
+        T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
+    ]
+)
 
 
 def preprocess(batch):
@@ -34,7 +35,7 @@ def preprocess(batch):
         img = arr.convert("RGB")
         tensor_list.append(transform(img))
     batch["pixel_values"] = torch.stack(tensor_list)
-    batch["labels"]      = batch["label"]
+    batch["labels"] = batch["label"]
     return batch
 
 
@@ -42,7 +43,7 @@ ds = load_dataset("uoft-cs/cifar10")
 
 print("processing train set")
 ds_train = ds["train"].map(
-# ds_train = ds["train"].select(range(1000)).map(
+    # ds_train = ds["train"].select(range(1000)).map(
     preprocess,
     batched=True,
     batch_size=64,
@@ -51,7 +52,7 @@ ds_train = ds["train"].map(
 
 print("processing test set")
 ds_test = ds["test"].map(
-# ds_test = ds["test"].select(range(100)).map(
+    # ds_test = ds["test"].select(range(100)).map(
     preprocess,
     batched=True,
     batch_size=64,
@@ -61,6 +62,8 @@ ds_test = ds["test"].map(
 
 # accuracy metric
 import numpy as np
+
+
 def compute_metrics(p):
     preds = np.argmax(p.predictions, axis=1)
     return {"accuracy": (preds == p.label_ids).mean()}

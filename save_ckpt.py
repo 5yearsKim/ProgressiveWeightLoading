@@ -1,5 +1,6 @@
-from transformers import AutoImageProcessor, AutoModelForImageClassification
 import os
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 # Load the processor and model
 image_processor = AutoImageProcessor.from_pretrained("microsoft/resnet-18")
@@ -14,4 +15,3 @@ model.save_pretrained(local_dir)
 
 
 print(f"Checkpoint saved to: {os.path.abspath(local_dir)}")
-

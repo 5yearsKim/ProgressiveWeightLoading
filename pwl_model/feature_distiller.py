@@ -1,31 +1,34 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import ResNetForImageClassification, ResNetConfig
+from transformers import ResNetConfig, ResNetForImageClassification
 
-        # # Choose which layers to distill; here we pick two ResNet “stages”
-        # teacher_layers = {
-        #     "stage0": teacher.resnet.encoder.stages[0],
-        #     "stage1": teacher.resnet.encoder.stages[1],
-        #     "stage2": teacher.resnet.encoder.stages[2],
-        #     "stage3": teacher.resnet.encoder.stages[3],
-        # }
-        # student_layers = {
-        #     "stage0": student.resnet.encoder.stages[0],
-        #     "stage1": student.resnet.encoder.stages[1],
-        #     "stage2": student.resnet.encoder.stages[2],
-        #     "stage3": student.resnet.encoder.stages[3],
-        # }
+# # Choose which layers to distill; here we pick two ResNet “stages”
+# teacher_layers = {
+#     "stage0": teacher.resnet.encoder.stages[0],
+#     "stage1": teacher.resnet.encoder.stages[1],
+#     "stage2": teacher.resnet.encoder.stages[2],
+#     "stage3": teacher.resnet.encoder.stages[3],
+# }
+# student_layers = {
+#     "stage0": student.resnet.encoder.stages[0],
+#     "stage1": student.resnet.encoder.stages[1],
+#     "stage2": student.resnet.encoder.stages[2],
+#     "stage3": student.resnet.encoder.stages[3],
+# }
+
 
 class FeatureDistiller(nn.Module):
-    def __init__(self,
-                 student,
-                 teacher,
-                 student_ir: list[nn.Module]=[],
-                 teacher_ir: list[nn.Module]=[],
-                 temp: float = 4.0,
-                 alpha: float = 0.5,
-                 beta: float = 0.5):
+    def __init__(
+        self,
+        student,
+        teacher,
+        student_ir: list[nn.Module] = [],
+        teacher_ir: list[nn.Module] = [],
+        temp: float = 4.0,
+        alpha: float = 0.5,
+        beta: float = 0.5,
+    ):
         """
         temp: temperature for KD
         alpha: weight for hard-label CE loss
@@ -50,11 +53,11 @@ class FeatureDistiller(nn.Module):
         self._feat_t: list[torch.Tensor] = [None * self.num_ir]
         self._feat_s: list[torch.Tensor] = [None * self.num_ir]
 
-
         def _get_hook(storage: list, idx: int) -> callable:
             def hook(module, inp, out):
                 # out: Tensor of shape [B, C, H, W]
                 storage[idx] = out
+
             return hook
 
         # Register hooks
@@ -70,16 +73,15 @@ class FeatureDistiller(nn.Module):
         self.alpha = alpha
         self.beta = beta
 
-
     def forward(self, pixel_values: torch.Tensor, labels: torch.LongTensor):
         # --- Student forward ---
         out_s = self.student(pixel_values)
-        logits_s = out_s.logits           # [B, num_classes]
+        logits_s = out_s.logits  # [B, num_classes]
 
         # --- Teacher forward ---
         with torch.no_grad():
             out_t = self.teacher(pixel_values)
-        logits_t = out_t.logits           # [B, num_classes]
+        logits_t = out_t.logits  # [B, num_classes]
 
         # 1) Hard-label CE
         loss_hard = self.ce(logits_s, labels)
@@ -113,8 +115,8 @@ class FeatureDistiller(nn.Module):
 
         # --- Combine all losses ---
         loss = (
-            self.alpha * loss_hard +
-            (1 - self.alpha - self.beta) * loss_soft +
-            self.beta * loss_feat
+            self.alpha * loss_hard
+            + (1 - self.alpha - self.beta) * loss_soft
+            + self.beta * loss_feat
         )
         return {"loss": loss, "logits": logits_s}

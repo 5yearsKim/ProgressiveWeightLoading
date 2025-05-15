@@ -1,16 +1,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import ResNetForImageClassification, ResNetConfig
+from transformers import ResNetConfig, ResNetForImageClassification
 
 
 class ResNetFeatureDistiller(nn.Module):
-    def __init__(self,
-                 student: ResNetForImageClassification,
-                 teacher: ResNetForImageClassification,
-                 temp: float = 4.0,
-                 alpha: float = 0.5,
-                 beta: float = 0.5):
+    def __init__(
+        self,
+        student: ResNetForImageClassification,
+        teacher: ResNetForImageClassification,
+        temp: float = 4.0,
+        alpha: float = 0.5,
+        beta: float = 0.5,
+    ):
         """
         temp: temperature for KD
         alpha: weight for hard-label CE loss
@@ -63,17 +65,18 @@ class ResNetFeatureDistiller(nn.Module):
         def hook(module, inp, out):
             # out: Tensor of shape [B, C, H, W]
             storage[name] = out
+
         return hook
 
     def forward(self, pixel_values, labels: torch.LongTensor):
         # --- Student forward ---
         out_s = self.student(pixel_values)
-        logits_s = out_s.logits           # [B, num_classes]
+        logits_s = out_s.logits  # [B, num_classes]
 
         # --- Teacher forward ---
         with torch.no_grad():
             out_t = self.teacher(pixel_values)
-        logits_t = out_t.logits           # [B, num_classes]
+        logits_t = out_t.logits  # [B, num_classes]
 
         # 1) Hard-label CE
         loss_hard = self.ce(logits_s, labels)
@@ -92,22 +95,23 @@ class ResNetFeatureDistiller(nn.Module):
             # If shapes differ (e.g. student narrower), you may need a 1×1 conv to align dims
             if f_s.shape != f_t.shape:
                 # simple fallback: interpolate spatially and pad channels
-                f_t_resized = F.interpolate(f_t, size=f_s.shape[-2:], mode="bilinear", align_corners=False)
+                f_t_resized = F.interpolate(
+                    f_t, size=f_s.shape[-2:], mode="bilinear", align_corners=False
+                )
                 if f_t_resized.shape[1] != f_s.shape[1]:
                     # zero-pad or project; here: truncate or pad zeros
                     minC = min(f_s.shape[1], f_t_resized.shape[1])
-                    f_t_resized = torch.cat([
-                        f_t_resized[:, :minC],
-                        torch.zeros_like(f_s[:, minC:])
-                    ], dim=1)
+                    f_t_resized = torch.cat(
+                        [f_t_resized[:, :minC], torch.zeros_like(f_s[:, minC:])], dim=1
+                    )
                 f_t = f_t_resized
             loss_feat += self.mse(f_s, f_t)
         loss_feat = loss_feat / len(self._feat_s)
 
         # --- Combine all losses ---
         loss = (
-            self.alpha * loss_hard +
-            (1 - self.alpha - self.beta) * loss_soft +
-            self.beta * loss_feat
+            self.alpha * loss_hard
+            + (1 - self.alpha - self.beta) * loss_soft
+            + self.beta * loss_feat
         )
         return {"loss": loss, "logits": logits_s}
