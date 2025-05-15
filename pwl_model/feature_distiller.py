@@ -46,12 +46,12 @@ class FeatureDistiller(nn.Module):
         self.student = student
         self.student.train()
 
-        assert len(teacher_ir) == len(stuent_ir)
+        assert len(teacher_ir) == len(student_ir)
         self.num_ir = len(teacher_ir)
 
         # Storage for hooked features
-        self._feat_t: list[torch.Tensor] = [None * self.num_ir]
-        self._feat_s: list[torch.Tensor] = [None * self.num_ir]
+        self._feat_t: list[torch.Tensor] = [None] * self.num_ir
+        self._feat_s: list[torch.Tensor] = [None] * self.num_ir
 
         def _get_hook(storage: list, idx: int) -> callable:
             def hook(module, inp, out):
@@ -61,9 +61,9 @@ class FeatureDistiller(nn.Module):
             return hook
 
         # Register hooks
-        for i, mod in enumerate(teacher_layers()):
+        for i, mod in enumerate(teacher_ir):
             mod.register_forward_hook(_get_hook(self._feat_t, i))
-        for i, mod in enumerate(student_layers()):
+        for i, mod in enumerate(student_ir):
             mod.register_forward_hook(_get_hook(self._feat_s, i))
 
         # Loss fns
@@ -84,7 +84,7 @@ class FeatureDistiller(nn.Module):
         logits_t = out_t.logits  # [B, num_classes]
 
         # 1) Hard-label CE
-        loss_hard = self.ce(logits_s, labels)
+        loss_hard = self.ce(logits_s.detach(), labels)
 
         # 2) Soft-label KL
         T = self.temp
@@ -111,12 +111,13 @@ class FeatureDistiller(nn.Module):
             #         ], dim=1)
             #     f_t = f_t_resized
             loss_feat += self.mse(f_s, f_t)
-        loss_feat = loss_feat / self.num_ir
+        loss_feat = loss_feat / self.num_ir if self.num_ir >= 2 else 0
 
         # --- Combine all losses ---
         loss = (
             self.alpha * loss_hard
-            + (1 - self.alpha - self.beta) * loss_soft
+            + (1 - self.alpha) * loss_soft
             + self.beta * loss_feat
         )
+
         return {"loss": loss, "logits": logits_s}

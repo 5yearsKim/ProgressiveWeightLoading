@@ -1,9 +1,10 @@
 import argparse
-from typing import Literal
 
+import mlflow
+import numpy as np
+import torch
 from datasets import load_dataset
-from transformers import (AutoImageProcessor, ResNetConfig,
-                          ResNetForImageClassification, Trainer,
+from transformers import (AutoImageProcessor, Trainer,
                           TrainingArguments)
 from transformers.integrations import MLflowCallback
 
@@ -38,25 +39,25 @@ def parse_args():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./ckpts/resnet/resnet18_distill",
+        default="./ckpts/lenet-cifar10/students",
         help="Where to save distilled checkpoints",
     )
     parser.add_argument(
         "--num_train_epochs",
         type=int,
-        default=3,
+        default=30,
         help="Number of training epochs",
     )
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=1e-4,
+        default=3e-4,
         help="Initial learning rate",
     )
     parser.add_argument(
-        "--per_device_train_batch_size",
+        "--batch_size",
         type=int,
-        default=8,
+        default=32,
         help="Batch size per device",
     )
     return parser.parse_args()
@@ -75,6 +76,7 @@ class DistilTrainer(Trainer):
 
 def main():
     args = parse_args()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.model_type == "resnet":
         from transformers import ResNetConfig, ResNetForImageClassification
@@ -95,10 +97,19 @@ def main():
             return batch
 
     elif args.model_type == "lenet":
-        from pwl_model.lenet5 import LeNet5
+        from torchvision import transforms as T
 
-        teacher = LeNet5().from_
-        student = LeNet5()
+        from pwl_model.lenet5 import LeNet5Config, LeNet5ForImageClassification
+
+        mlflow.set_experiment("lenet5-cifar10-distill")
+        mlflow.log_param("device", str(device))
+
+        teacher = LeNet5ForImageClassification.from_pretrained(
+            "./ckpts/lenet-cifar10/archives/checkpoint-7429"
+        ).to(device)
+
+        config = LeNet5Config()
+        student = LeNet5ForImageClassification(config).to(device)
 
         transform = T.Compose(
             [
@@ -119,19 +130,18 @@ def main():
     else:
         raise ValueError(f"{args.model_type} not defined")
 
-    ds = load_dataset(args.dataset_name, split=["train[:100]", "valid[:100]"])
+    ds = load_dataset(args.dataset_name)
     ds_train = ds["train"].map(
         preprocess,
         batched=True,
         batch_size=32,
-        remove_columns=["img"],
+        remove_columns=["img", "label"],
     )
     ds_val = ds["test"].map(
         preprocess,
         batched=True,
         batch_size=32,
         remove_columns=[
-            "image",
             "img",
             "label",
         ],  # 'pixel_values' and 'labels' goes to input
@@ -139,24 +149,32 @@ def main():
 
     distiller = FeatureDistiller(student, teacher)
 
+    def compute_metrics(p):
+        preds = np.argmax(p.predictions, axis=1)
+        return {"accuracy": (preds == p.label_ids).mean()}
+
     training_args = TrainingArguments(
         output_dir=args.output_dir,
-        per_device_train_batch_size=args.per_device_train_batch_size,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.num_train_epochs,
         learning_rate=args.learning_rate,
         save_safetensors=True,
         report_to=["mlflow"],
         logging_dir="./runs",
-        logging_strategy="steps",
-        logging_steps=50,
-        save_strategy="steps",
-        save_steps=500,
+        eval_strategy="epoch",
+        logging_strategy="epoch",
+        save_strategy="epoch",
+        greater_is_better=True,
+        save_total_limit=1,
     )
 
     trainer = DistilTrainer(
         model=distiller,
         args=training_args,
-        train_dataset=train_ds,
+        train_dataset=ds_train,
+        eval_dataset=ds_val,
+        compute_metrics=compute_metrics,
         callbacks=[MLflowCallback()],
     )
 
