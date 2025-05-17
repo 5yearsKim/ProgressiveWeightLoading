@@ -1,0 +1,127 @@
+import torch
+import torch.nn as nn
+
+from .layers.block_module import BlockModelForImageClassification, BlockModule
+from .layers.feature_converter import FeatureConverter
+
+
+class SwapNet(nn.Module):
+    def __init__(
+        self,
+        teacher: BlockModelForImageClassification,
+        student: BlockModelForImageClassification,
+        input_shape: tuple = (3, 32, 32),
+    ):
+
+        super().__init__()
+
+        self.teacher = teacher
+        self.student = student
+
+        assert len(self.student.blocks) == len(
+            self.teacher.blocks
+        ), "Teacher and student must have the same number of blocks"
+        self.num_blocks = len(self.student.blocks)
+        self.num_feat = self.num_blocks - 1
+
+        # Storage for hooked features
+        self._feat_t: list[torch.Tensor] = []
+        self._feat_s: list[torch.Tensor] = []
+
+        with torch.no_grad():
+            x_s = torch.zeros((1, *input_shape))
+            x_t = torch.zeros((1, *input_shape))
+            for i, (student.block, t_block) in enumerate(zip(self.student.blocks, self.teacher.blocks)):
+                if i == self.num_blocks - 1:
+                    break
+                x_s = student.block(x_s)
+                x_t = t_block(x_t)
+                self._feat_s.append(x_s)
+                self._feat_t.append(x_t)
+
+        assert (
+            len(self._feat_s) == len(self._feat_t) == self.num_feat
+        ), "Number of features in student and teacher must be the same"
+
+        self.encoders = nn.ModuleList([])
+        self.decoders = nn.ModuleList([])
+
+        for feat_s, feat_t in zip(self._feat_s, self._feat_t):
+            chan_t, chan_s = feat_t.shape[1], feat_s.shape[1]
+
+            if chan_t == chan_s:
+                self.encoders.append(nn.Identity())
+                self.decoders.append(nn.Identity())
+            elif chan_t > chan_s:
+                self.encoders.append(FeatureConverter(chan_t, chan_s))
+                self.decoders.append(FeatureConverter(chan_s, chan_t))
+            else:
+                raise ValueError(f"chan_s {chan_s} should be less than chan_t {chan_t}")
+
+    def forward(self, x, from_teacher: list[bool]):
+        assert (
+            len(from_teacher) == self.num_blocks
+        ), "from_teacher must be a list of booleans with the same length as the number of blocks"
+
+        for i in range(self.num_blocks):
+            is_teacher = from_teacher[i]
+            block = self.teacher.blocks[i] if is_teacher else self.student.blocks[i]
+            # converter is None if last block or if next block is from teacher is same as current block
+            converter: None | FeatureConverter = (
+                None
+                if i == self.num_blocks - 1 or from_teacher[i] == from_teacher[i + 1]
+                else (self.encoders[i] if is_teacher else self.decoders[i])
+            )
+            x = block(x)
+            if converter is not None:
+                x = converter(x)
+        
+        classifier = (
+            self.teacher.classifier if from_teacher[-1] else self.student.classifier
+        )
+        logits = classifier(x)
+
+        return logits
+
+    def infer_teacher(
+        self, x, return_features: bool = False
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        return self._infer_block(
+            x,
+            self.teacher.blocks,
+            self.teacher.classifier,
+            return_features=return_features,
+        )
+
+    def infer_student(
+        self, x, return_features: bool = False
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        return self._infer_block(
+            x,
+            self.student.blocks,
+            self.student.classifier,
+            return_features=return_features,
+        )
+
+    def _infer_block(
+        self,
+        x,
+        blocks: list[BlockModule],
+        classifier: nn.Module,
+        return_features: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, list[torch.Tensor]]:
+        if return_features:
+            features = []
+
+        for i, block in enumerate(blocks):
+            x = block(x)
+
+            if return_features and i < self.num_feat:
+                features.append(x)
+
+        logits = classifier(x)
+
+        if return_features:
+            return logits, features
+        else:
+            return logits

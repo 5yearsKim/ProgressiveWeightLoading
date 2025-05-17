@@ -9,7 +9,6 @@ class FeatureConverter(nn.Module):
         self.c_in, self.c_out = c_in, c_out
         self.linear = nn.Linear(c_in, c_out)
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         x: (B, C_in, D1, D2, ..., Dk)
@@ -24,7 +23,7 @@ class FeatureConverter(nn.Module):
         x_perm = x.permute(*permute_order)  # (..., C_in)
 
         # 2) apply linear → shape (..., C_out)
-        y_perm = self.linear(x_perm)            # x @ W^T + b
+        y_perm = self.linear(x_perm)  # x @ W^T + b
 
         # 3) permute back: move C_out to dim=1
         #    invert the original permutation
