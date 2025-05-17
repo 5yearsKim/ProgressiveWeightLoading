@@ -68,8 +68,8 @@ def parse_args():
     )
     parser.add_argument(
         "--is_sample",
-        action='store_true',
-        help="Take only sample dataset for the development purpose"
+        action="store_true",
+        help="Take only sample dataset for the development purpose",
     )
     return parser.parse_args()
 
@@ -111,30 +111,34 @@ def main():
     elif args.model_type == "lenet":
         from torchvision import transforms as T
 
-        from pwl_model.lenet5 import LeNet5Config, LeNet5ForImageClassification
+        from pwl_model.lenet5 import (LeNet5Config,
+                                      create_lenet5_blocks)
+        from pwl_model.layers.block_module import (
+            BlockModelForImageClassification,
+        )
+        from pwl_model.swap_net import SwapNet
 
         mlflow.set_experiment("lenet5-cifar10-distill")
         mlflow.log_param("device", str(device))
 
-        teacher = LeNet5ForImageClassification.from_pretrained(
-            "./ckpts/lenet-cifar10/teachers/checkpoint-7429"
-        ).to(device)
+        t_config = LeNet5Config()
+        t_blocks, last_out_dim = create_lenet5_blocks(t_config)
+        teacher = BlockModelForImageClassification(
+            blocks=t_blocks, last_out_dim=last_out_dim, num_labels=10
+        )
 
-        config = LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
-        student = LeNet5ForImageClassification(config).to(device)
+        s_config = LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
+        s_blocks, last_out_dim = create_lenet5_blocks(s_config)
 
-        teacher_ir = [
-            teacher.lenet.conv1,
-            teacher.lenet.conv2,
-            teacher.lenet.fc1,
-            teacher.lenet.fc2,
-        ]
-        student_ir = [
-            student.lenet.conv1,
-            student.lenet.conv2,
-            student.lenet.fc1,
-            student.lenet.fc2,
-        ]
+        student = BlockModelForImageClassification(
+            blocks=s_blocks, last_out_dim=last_out_dim, num_labels=10
+        )
+
+        swapnet = SwapNet(
+            teacher=teacher,
+            student=student,
+            input_shape=(3, 32, 32),
+        )
 
         transform = T.Compose(
             [
@@ -171,16 +175,12 @@ def main():
             "label",
         ],  # 'pixel_values' and 'labels' goes to input
     )
-
     if args.is_sample:
-        ds_train = ds_train.select(range(100))
+        ds_train = ds_train.select(range(500))
         ds_val = ds_val.select(range(100))
 
     distiller = FeatureDistiller(
-        student,
-        teacher,
-        teacher_ir=teacher_ir,
-        student_ir=student_ir,
+        swapnet=swapnet,
     )
 
     def compute_metrics(p: EvalPrediction):
@@ -208,6 +208,7 @@ def main():
         metric_for_best_model="accuracy",
         greater_is_better=True,
         save_total_limit=1,
+        remove_unused_columns=False,
     )
 
     trainer = DistilTrainer(
