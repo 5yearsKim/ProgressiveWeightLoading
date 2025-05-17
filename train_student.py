@@ -1,9 +1,11 @@
 import argparse
+import os
 
 import mlflow
 import numpy as np
 import torch
 from datasets import load_dataset
+from safetensors.torch import load_file
 from transformers import AutoImageProcessor, Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
 from transformers.trainer_utils import EvalPrediction
@@ -26,7 +28,7 @@ def parse_args():
     parser.add_argument(
         "--teacher_path",
         type=str,
-        default="./ckpts/lenet-cifar10/teachers/checkpoint-7429",
+        default="./ckpts/lenet-cifar10/teachers/checkpoint-7820",
         help="Path or model identifier of the pretrained teacher",
     )
     parser.add_argument(
@@ -111,11 +113,9 @@ def main():
     elif args.model_type == "lenet":
         from torchvision import transforms as T
 
-        from pwl_model.lenet5 import (LeNet5Config,
-                                      create_lenet5_blocks)
-        from pwl_model.layers.block_module import (
-            BlockModelForImageClassification,
-        )
+        from pwl_model.layers.block_module import \
+            BlockModelForImageClassification
+        from pwl_model.lenet5 import LeNet5Config, create_lenet5_blocks
         from pwl_model.swap_net import SwapNet
 
         mlflow.set_experiment("lenet5-cifar10-distill")
@@ -126,6 +126,9 @@ def main():
         teacher = BlockModelForImageClassification(
             blocks=t_blocks, last_out_dim=last_out_dim, num_labels=10
         )
+
+        # state_dict = load_file(os.path.join(args.teacher_path, "model.safetensors"))
+        # teacher.load_state_dict(state_dict)
 
         s_config = LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
         s_blocks, last_out_dim = create_lenet5_blocks(s_config)
