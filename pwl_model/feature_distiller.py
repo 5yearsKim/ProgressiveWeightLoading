@@ -34,9 +34,9 @@ class FeatureDistiller(nn.Module):
         self,
         swapnet: SwapNet,
         temp: float = 2.0,
-        alpha: float = 0.5,
-        w_sync: float = 0.3,
-        w_recon: float = 0.3,
+        alpha: float = 0.4,
+        w_sync: float = 2,
+        w_recon: float = 2,
     ):
         """
         temp: temperature for KD
