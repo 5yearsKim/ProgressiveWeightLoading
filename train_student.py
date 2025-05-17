@@ -6,6 +6,7 @@ import torch
 from datasets import load_dataset
 from transformers import AutoImageProcessor, Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
+from transformers.trainer_utils import EvalPrediction
 
 from pwl_model.feature_distiller import FeatureDistiller
 
@@ -25,7 +26,7 @@ def parse_args():
     parser.add_argument(
         "--teacher_path",
         type=str,
-        default="./ckpts/lenet-cifar10/archives/teacher-14858",
+        default="./ckpts/lenet-cifar10/teachers/checkpoint-7429",
         help="Path or model identifier of the pretrained teacher",
     )
     parser.add_argument(
@@ -59,18 +60,30 @@ def parse_args():
         default=32,
         help="Batch size per device",
     )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=bool,
+        default=True,
+        help="Batch size per device",
+    )
+    parser.add_argument(
+        "--is_sample",
+        action='store_true',
+        help="Take only sample dataset for the development purpose"
+    )
     return parser.parse_args()
 
 
 class DistilTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs: bool = False, **kwargs):
         # standard HuggingFace Trainer calls model(...) under the hood
-        loss_dict = model(
+        outputs = model(
             pixel_values=inputs["pixel_values"],
             labels=inputs["labels"],
         )
-        loss = loss_dict["loss"]
-        return (loss, loss_dict) if return_outputs else loss
+        loss = outputs["loss"]
+
+        return (loss, outputs) if return_outputs else loss
 
 
 def main():
@@ -104,11 +117,24 @@ def main():
         mlflow.log_param("device", str(device))
 
         teacher = LeNet5ForImageClassification.from_pretrained(
-            "./ckpts/lenet-cifar10/archives/checkpoint-7429"
+            "./ckpts/lenet-cifar10/teachers/checkpoint-7429"
         ).to(device)
 
-        config = LeNet5Config()
+        config = LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
         student = LeNet5ForImageClassification(config).to(device)
+
+        teacher_ir = [
+            teacher.lenet.conv1,
+            teacher.lenet.conv2,
+            teacher.lenet.fc1,
+            teacher.lenet.fc2,
+        ]
+        student_ir = [
+            student.lenet.conv1,
+            student.lenet.conv2,
+            student.lenet.fc1,
+            student.lenet.fc2,
+        ]
 
         transform = T.Compose(
             [
@@ -146,11 +172,26 @@ def main():
         ],  # 'pixel_values' and 'labels' goes to input
     )
 
-    distiller = FeatureDistiller(student, teacher)
+    if args.is_sample:
+        ds_train = ds_train.select(range(100))
+        ds_val = ds_val.select(range(100))
 
-    def compute_metrics(p):
-        preds = np.argmax(p.predictions, axis=1)
-        return {"accuracy": (preds == p.label_ids).mean()}
+    distiller = FeatureDistiller(
+        student,
+        teacher,
+        teacher_ir=teacher_ir,
+        student_ir=student_ir,
+    )
+
+    def compute_metrics(p: EvalPrediction):
+        logits = (
+            p.predictions[0]
+            if isinstance(p.predictions, (tuple, list))
+            else p.predictions
+        )
+        preds = np.argmax(logits, axis=1)
+        accuracy = (preds == p.label_ids).mean()
+        return {"accuracy": accuracy}
 
     training_args = TrainingArguments(
         output_dir=args.output_dir,
@@ -164,6 +205,7 @@ def main():
         eval_strategy="epoch",
         logging_strategy="epoch",
         save_strategy="epoch",
+        metric_for_best_model="accuracy",
         greater_is_better=True,
         save_total_limit=1,
     )

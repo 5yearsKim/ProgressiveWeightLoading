@@ -13,8 +13,8 @@ class LeNet5Config(PretrainedConfig):
         self,
         in_channels: int = 3,
         num_labels: int = 10,
-        cnn_channels=[6, 16],
-        fc_sizes=[400, 120, 84],
+        cnn_channels: list[int]=[6, 16],
+        fc_sizes: list[int]=[400, 120, 84],
         **kwargs,
     ):
 
@@ -98,3 +98,5 @@ class LeNet5ForImageClassification(LeNet5PreTrainedModel):
             loss = nn.CrossEntropyLoss()(logits, labels)
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits)
+
+

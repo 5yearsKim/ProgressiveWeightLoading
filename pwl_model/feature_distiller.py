@@ -1,21 +1,27 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import ResNetConfig, ResNetForImageClassification
+from transformers.utils import ModelOutput
+from .layers.feature_converter import FeatureConverter
 
-# # Choose which layers to distill; here we pick two ResNet “stages”
-# teacher_layers = {
-#     "stage0": teacher.resnet.encoder.stages[0],
-#     "stage1": teacher.resnet.encoder.stages[1],
-#     "stage2": teacher.resnet.encoder.stages[2],
-#     "stage3": teacher.resnet.encoder.stages[3],
-# }
-# student_layers = {
-#     "stage0": student.resnet.encoder.stages[0],
-#     "stage1": student.resnet.encoder.stages[1],
-#     "stage2": student.resnet.encoder.stages[2],
-#     "stage3": student.resnet.encoder.stages[3],
-# }
+
+@dataclass
+class DistillerOutput(ModelOutput):
+    """
+    Custom output for your distiller, so Trainer still
+    knows to pick .loss and .logits, but you also expose
+    loss_hard / loss_soft / loss_feat on outputs.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+
+    loss_hard: torch.FloatTensor | None = None
+    loss_soft: torch.FloatTensor | None = None
+    loss_feat_sync: torch.FloatTensor | None = None
+    loss_feat_recon: torch.FloatTensor | None = None
 
 
 class FeatureDistiller(nn.Module):
@@ -23,11 +29,15 @@ class FeatureDistiller(nn.Module):
         self,
         student,
         teacher,
+        input_shape: tuple = (3, 32, 32),
         student_ir: list[nn.Module] = [],
         teacher_ir: list[nn.Module] = [],
-        temp: float = 4.0,
+        temp: float = 2.0,
         alpha: float = 0.5,
-        beta: float = 0.5,
+        w_sync: float = 0.3,
+        w_recon: float = 0.3,
+
+
     ):
         """
         temp: temperature for KD
@@ -53,6 +63,8 @@ class FeatureDistiller(nn.Module):
         self._feat_t: list[torch.Tensor] = [None] * self.num_ir
         self._feat_s: list[torch.Tensor] = [None] * self.num_ir
 
+        
+
         def _get_hook(storage: list, idx: int) -> callable:
             def hook(module, inp, out):
                 # out: Tensor of shape [B, C, H, W]
@@ -66,14 +78,38 @@ class FeatureDistiller(nn.Module):
         for i, mod in enumerate(student_ir):
             mod.register_forward_hook(_get_hook(self._feat_s, i))
 
+        with torch.no_grad():
+            device = next(self.teacher.parameters()).device
+            dummy = torch.zeros((1, *input_shape)).to(device)
+            _ = self.teacher(dummy)
+            _ = self.student(dummy)
+
+        self.encoders = nn.ModuleList([])
+        self.decoders = nn.ModuleList([])
+
+        for feat_s, feat_t in zip(self._feat_s, self._feat_t):
+            chan_t, chan_s = feat_t.shape[1], feat_s.shape[1]
+
+            if chan_t == chan_s:
+                self.encoders.append(nn.Identity())
+                self.decoders.append(nn.Identity())
+            elif chan_t > chan_s:
+                self.encoders.append(FeatureConverter(chan_t, chan_s))
+                self.decoders.append(FeatureConverter(chan_s, chan_t))
+            else:
+                raise ValueError(f"chan_s {chan_s} should be less than chan_t {chan_t}")
+            
         # Loss fns
         self.temp = temp
         self.ce = nn.CrossEntropyLoss()
         self.mse = nn.MSELoss()
         self.alpha = alpha
-        self.beta = beta
+        self.w_sync = w_sync
+        self.w_recon = w_recon
 
-    def forward(self, pixel_values: torch.Tensor, labels: torch.LongTensor):
+    def forward(
+        self, pixel_values: torch.Tensor, labels: torch.LongTensor
+    ) -> DistillerOutput:
         # --- Student forward ---
         out_s = self.student(pixel_values)
         logits_s = out_s.logits  # [B, num_classes]
@@ -84,40 +120,41 @@ class FeatureDistiller(nn.Module):
         logits_t = out_t.logits  # [B, num_classes]
 
         # 1) Hard-label CE
-        loss_hard = self.ce(logits_s.detach(), labels)
+        loss_hard = self.alpha * self.ce(logits_s.detach(), labels)
 
         # 2) Soft-label KL
         T = self.temp
         p_s = F.log_softmax(logits_s / T, dim=-1)
         p_t = F.softmax(logits_t / T, dim=-1)
-        loss_soft = F.kl_div(p_s, p_t, reduction="batchmean") * (T * T)
-
-        # 3) Feature-MSE between each tapped layer
-        loss_feat = 0.0
-        for i in range(self.num_ir):
-            f_s = self._feat_s[i]
-            f_t = self._feat_t[i]
-
-            # # If shapes differ (e.g. student narrower), you may need a 1×1 conv to align dims
-            # if f_s.shape != f_t.shape:
-            #     # simple fallback: interpolate spatially and pad channels
-            #     f_t_resized = F.interpolate(f_t, size=f_s.shape[-2:], mode="bilinear", align_corners=False)
-            #     if f_t_resized.shape[1] != f_s.shape[1]:
-            #         # zero-pad or project; here: truncate or pad zeros
-            #         minC = min(f_s.shape[1], f_t_resized.shape[1])
-            #         f_t_resized = torch.cat([
-            #             f_t_resized[:, :minC],
-            #             torch.zeros_like(f_s[:, minC:])
-            #         ], dim=1)
-            #     f_t = f_t_resized
-            loss_feat += self.mse(f_s, f_t)
-        loss_feat = loss_feat / self.num_ir if self.num_ir >= 2 else 0
-
-        # --- Combine all losses ---
-        loss = (
-            self.alpha * loss_hard
-            + (1 - self.alpha) * loss_soft
-            + self.beta * loss_feat
+        loss_soft = (
+            (1 - self.alpha) * F.kl_div(p_s, p_t, reduction="batchmean") * (T * T)
         )
 
-        return {"loss": loss, "logits": logits_s}
+        # 3) Feature-MSE between each tapped layer
+        loss_feat_sync = 0.0
+        loss_feat_recon = 0.0
+
+        for i in range(self.num_ir):
+            feat_s, feat_t = self._feat_s[i], self._feat_t[i]
+            encoder, decoder = self.encoders[i], self.decoders[i]
+
+            feat_target = encoder(feat_t)
+            feat_recon = decoder(feat_target)
+
+            loss_feat_sync += self.mse(feat_s, feat_target)
+            loss_feat_recon += self.mse(feat_t, feat_recon)
+
+        loss_feat_sync = self.w_sync * (loss_feat_sync / (self.num_ir if self.num_ir >= 2 else 1))
+        loss_feat_recon = self.w_recon * (loss_feat_recon / (self.num_ir if self.num_ir >= 2 else 1))
+
+        # --- Combine all losses ---
+        total_loss = loss_hard + loss_soft + loss_feat_sync + loss_feat_recon
+
+        return DistillerOutput(
+            logits=logits_s,
+            loss=total_loss,
+            loss_hard=loss_hard,
+            loss_soft=loss_soft,
+            loss_feat_sync=loss_feat_sync,
+            loss_feat_recon=loss_feat_recon,
+        )
