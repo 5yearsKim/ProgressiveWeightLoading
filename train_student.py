@@ -6,11 +6,12 @@ import numpy as np
 import torch
 from datasets import load_dataset
 from safetensors.torch import load_file
-from transformers import AutoImageProcessor, Trainer, TrainingArguments
+from transformers import AutoImageProcessor, Trainer, TrainingArguments, TrainerCallback, TrainerState, TrainerControl
 from transformers.integrations import MLflowCallback
 from transformers.trainer_utils import EvalPrediction
 
-from pwl_model.feature_distiller import FeatureDistiller
+from pwl_model.feature_distiller import FeatureDistiller, DistillerOutput
+from pwl_model.utils.training_utils import AverageMeter
 
 
 def parse_args():
@@ -75,17 +76,45 @@ def parse_args():
     )
     return parser.parse_args()
 
+meter_dict: dict[str, AverageMeter] = {
+    'hard': AverageMeter(),
+    'soft': AverageMeter(),
+    'feat_sync': AverageMeter(),
+    'feat_recon': AverageMeter(),
+}
 
 class DistilTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs: bool = False, **kwargs):
         # standard HuggingFace Trainer calls model(...) under the hood
-        outputs = model(
+        outputs: DistillerOutput = model(
             pixel_values=inputs["pixel_values"],
             labels=inputs["labels"],
         )
         loss = outputs["loss"]
 
+        meter_dict['hard'].update(outputs.loss_hard.item())
+        meter_dict['soft'].update(outputs.loss_soft.item())
+        meter_dict['feat_sync'].update(outputs.loss_feat_sync.item())
+        meter_dict['feat_recon'].update(outputs.loss_feat_recon.item())
+
         return (loss, outputs) if return_outputs else loss
+    
+class MeterCallback(TrainerCallback):
+    def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        # logs is the dict of already‐computed metrics (eval_loss, epoch, etc)
+        logs = {}
+
+        # Pull out your meters and add their epoch‐averages to the logs
+        for name, meter in meter_dict.items():
+            logs[f"{name}"] = meter.avg
+            meter.reset()  
+
+        print(logs)
+
+        # Tell HF to write these logs now
+        control.should_log = True
+        return control
+
 
 
 def main():
@@ -220,7 +249,7 @@ def main():
         train_dataset=ds_train,
         eval_dataset=ds_val,
         compute_metrics=compute_metrics,
-        callbacks=[MLflowCallback()],
+        callbacks=[MLflowCallback(), MeterCallback()],
     )
 
     trainer.train()
