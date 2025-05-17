@@ -9,11 +9,11 @@ from transformers.integrations import MLflowCallback
 from pwl_model.layers.block_module import BlockModelForImageClassification
 from pwl_model.lenet5 import LeNet5Config, create_lenet5_blocks
 
-EPOCHS = 30
+EPOCHS = 40
 LEARNING_RATE = 3e-3
 BATCH_SIZE = 128
 RESUME_FROM_CHECKPOINT = False
-IS_SAMPLE = True
+IS_SAMPLE = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

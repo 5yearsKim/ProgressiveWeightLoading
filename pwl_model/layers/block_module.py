@@ -4,28 +4,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention)
 
-
-class BlockModule(nn.Module):
-    def __init__(self, blocks: nn.Module | list[nn.Module]):
-        """
-        Wrap either a single block or a list of blocks,
-        and expose them as one nn.Module in a Sequential‐style.
-        """
-        super().__init__()
-        # If it's already a single Module, just use it directly
-        if isinstance(blocks, nn.Module):
-            self.seq = blocks
-        # If it's a list/tuple of Modules, pack into a Sequential
-        elif isinstance(blocks, (list, tuple)):
-            self.seq = nn.Sequential(*blocks)
-        else:
-            raise ValueError(
-                f"blocks must be nn.Module or list of them, got {type(blocks)}"
-            )
-
-    def forward(self, *args, **kwargs):
-        # Just forward everything to the underlying module
-        return self.seq(*args, **kwargs)
+BlockModule = nn.Sequential
 
 
 class BlockModelForImageClassification(nn.Module):

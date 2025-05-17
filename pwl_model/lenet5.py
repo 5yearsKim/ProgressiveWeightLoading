@@ -108,33 +108,23 @@ def create_lenet5_blocks(config: LeNet5Config) -> tuple[list[BlockModule], int]:
     """
     lenet5_blocks = [
         BlockModule(
-            [
-                nn.Conv2d(config.in_channels, config.cnn_channels[0], kernel_size=5),
-                nn.ReLU(),
-                nn.AvgPool2d(kernel_size=2, stride=2),
-            ]
+            nn.Conv2d(config.in_channels, config.cnn_channels[0], kernel_size=5),
+            nn.ReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2),
         ),
         BlockModule(
-            [
-                nn.Conv2d(
-                    config.cnn_channels[0], config.cnn_channels[1], kernel_size=5
-                ),
-                nn.ReLU(),
-                nn.AvgPool2d(kernel_size=2, stride=2),
-            ]
+            nn.Conv2d(config.cnn_channels[0], config.cnn_channels[1], kernel_size=5),
+            nn.ReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2),
         ),
         BlockModule(
-            [
-                nn.Flatten(),
-                nn.Linear(config.fc_sizes[0], config.fc_sizes[1]),
-                nn.ReLU(),
-            ]
+            nn.Flatten(),
+            nn.Linear(config.fc_sizes[0], config.fc_sizes[1]),
+            nn.ReLU(),
         ),
         BlockModule(
-            [
-                nn.Linear(config.fc_sizes[1], config.fc_sizes[2]),
-                nn.ReLU(),
-            ]
+            nn.Linear(config.fc_sizes[1], config.fc_sizes[2]),
+            nn.ReLU(),
         ),
     ]
     return lenet5_blocks, config.fc_sizes[-1]

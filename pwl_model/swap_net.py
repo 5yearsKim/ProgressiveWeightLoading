@@ -31,10 +31,12 @@ class SwapNet(nn.Module):
         with torch.no_grad():
             x_s = torch.zeros((1, *input_shape))
             x_t = torch.zeros((1, *input_shape))
-            for i, (student.block, t_block) in enumerate(zip(self.student.blocks, self.teacher.blocks)):
+            for i, (s_block, t_block) in enumerate(
+                zip(self.student.blocks, self.teacher.blocks)
+            ):
                 if i == self.num_blocks - 1:
                     break
-                x_s = student.block(x_s)
+                x_s = s_block(x_s)
                 x_t = t_block(x_t)
                 self._feat_s.append(x_s)
                 self._feat_t.append(x_t)
@@ -75,7 +77,7 @@ class SwapNet(nn.Module):
             x = block(x)
             if converter is not None:
                 x = converter(x)
-        
+
         classifier = (
             self.teacher.classifier if from_teacher[-1] else self.student.classifier
         )
