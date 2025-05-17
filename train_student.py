@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument(
         "--teacher_path",
         type=str,
-        default="./ckpts/lenet-cifar10/teachers/checkpoint-7820",
+        default="./ckpts/lenet-cifar10/teachers/checkpoint-7038",
         help="Path or model identifier of the pretrained teacher",
     )
     parser.add_argument(
@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./ckpts/lenet-cifar10/students",
+        default="./ckpts/lenet-cifar10/student_training",
         help="Where to save distilled checkpoints",
     )
     parser.add_argument(
@@ -106,7 +106,7 @@ class MeterCallback(TrainerCallback):
 
         # Pull out your meters and add their epoch‐averages to the logs
         for name, meter in meter_dict.items():
-            logs[f"{name}"] = meter.avg
+            logs[f"{name}"] = format(meter.avg, '.3g')
             meter.reset()  
 
         print(logs)
@@ -156,8 +156,8 @@ def main():
             blocks=t_blocks, last_out_dim=last_out_dim, num_labels=10
         )
 
-        # state_dict = load_file(os.path.join(args.teacher_path, "model.safetensors"))
-        # teacher.load_state_dict(state_dict)
+        state_dict = load_file(os.path.join(args.teacher_path, "model.safetensors"))
+        teacher.load_state_dict(state_dict)
 
         s_config = LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
         s_blocks, last_out_dim = create_lenet5_blocks(s_config)
