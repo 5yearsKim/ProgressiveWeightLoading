@@ -126,7 +126,9 @@ def main():
     )
 
     def collate_fn(batch):
-        pixels = torch.stack([torch.as_tensor(example["pixel_values"]) for example in batch], dim=0)
+        pixels = torch.stack(
+            [torch.as_tensor(example["pixel_values"]) for example in batch], dim=0
+        )
         labels = torch.tensor(
             [example["labels"] for example in batch], dtype=torch.long
         )
@@ -144,13 +146,11 @@ def main():
     swapnet.to(device)
     swapnet.eval()
 
-
     from_teachers = [True] * swapnet.num_blocks
 
     def get_accuracy(from_teachers: list[bool]):
         all_preds = []
         all_labels = []
-
 
         with torch.no_grad():
             for batch in tqdm(eval_loader, desc="Evaluating"):
@@ -169,30 +169,24 @@ def main():
 
         accuracy = (all_preds == all_labels).mean()
         return accuracy
-    
+
     num_blocks = swapnet.num_blocks
-    
+
     candidates: list[list[bool]] = [
         [True] * num_blocks,
         [False] * num_blocks,
     ]
 
     for i in range(1, num_blocks):
-        candidates.append(
-            [True] * i + [False] * (num_blocks - i)
-        )
+        candidates.append([True] * i + [False] * (num_blocks - i))
     for i in range(1, num_blocks):
-        candidates.append(
-            [False] * i + [True] * (num_blocks - i)
-        )
+        candidates.append([False] * i + [True] * (num_blocks - i))
 
     for from_teachers in candidates:
         accuracy = get_accuracy(from_teachers)
-        print(f"{[('t' if item else 's' ) for item in from_teachers]}, accuracy: {accuracy:.4f}")
-
-
-
-
+        print(
+            f"{[('t' if item else 's' ) for item in from_teachers]}, accuracy: {accuracy:.4f}"
+        )
 
 
 if __name__ == "__main__":
