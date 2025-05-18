@@ -60,18 +60,18 @@ class SwapNet(nn.Module):
             else:
                 raise ValueError(f"chan_s {chan_s} should be less than chan_t {chan_t}")
 
-    def forward(self, x, from_teacher: list[bool]):
+    def forward(self, x, from_teachers: list[bool]) -> torch.Tensor:
         assert (
-            len(from_teacher) == self.num_blocks
+            len(from_teachers) == self.num_blocks
         ), "from_teacher must be a list of booleans with the same length as the number of blocks"
 
         for i in range(self.num_blocks):
-            is_teacher = from_teacher[i]
+            is_teacher = from_teachers[i]
             block = self.teacher.blocks[i] if is_teacher else self.student.blocks[i]
             # converter is None if last block or if next block is from teacher is same as current block
             converter: None | FeatureConverter = (
                 None
-                if i == self.num_blocks - 1 or from_teacher[i] == from_teacher[i + 1]
+                if i == self.num_blocks - 1 or from_teachers[i] == from_teachers[i + 1]
                 else (self.encoders[i] if is_teacher else self.decoders[i])
             )
             x = block(x)
@@ -79,7 +79,7 @@ class SwapNet(nn.Module):
                 x = converter(x)
 
         classifier = (
-            self.teacher.classifier if from_teacher[-1] else self.student.classifier
+            self.teacher.classifier if from_teachers[-1] else self.student.classifier
         )
         logits = classifier(x)
 

@@ -14,8 +14,8 @@ def parse_args():
     )
     parser.add_argument(
         "--distiller_ckpt",
-        default="./ckpts/lenet-cifar10/students/checkpoint-46890",
-        help="Path to the folder (or file) containing distiller pytorch_model.bin",
+        default="./ckpts/lenet-cifar10/students/checkpoint-17193",
+        help="Path to the folder (or file) containing distiller)",
     )
     parser.add_argument(
         "--out_dir",
@@ -46,20 +46,20 @@ def main():
     distiller_sd = safe_load(sd_path, device="cpu")
 
     # 2) Filter out only the student parameters
-    student_sd = {
-        k[len("student.") :]: v
+    swapnet_sd = {
+        k[len("swapnet.") :]: v
         for k, v in distiller_sd.items()
-        if k.startswith("student.")
+        if k.startswith("swapnet.")
     }
-    if not student_sd:
-        raise ValueError("No keys found with prefix 'student.' – check your checkpoint")
+    if not swapnet_sd:
+        raise ValueError("No keys found with prefix 'swapnet.' – check your checkpoint")
 
-    # 3) Instantiate a fresh student
+    # 3) Instantiate a fresh swapnet
     config = LeNet5Config(num_labels=args.num_labels)
     student = LeNet5ForImageClassification(config)
 
     # 4) Load the filtered weights
-    missing, unexpected = student.load_state_dict(student_sd, strict=False)
+    missing, unexpected = student.load_state_dict(swapnet_sd, strict=False)
     print(f"→ Missing keys when loading student:   {missing}")
     print(f"→ Unexpected keys when loading student:{unexpected}")
 
