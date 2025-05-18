@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass
 
 import torch
@@ -24,6 +25,7 @@ class DistillerOutput(ModelOutput):
     loss_soft: torch.FloatTensor | None = None
     loss_feat_sync: torch.FloatTensor | None = None
     loss_feat_recon: torch.FloatTensor | None = None
+    loss_cross: torch.FloatTensor | None = None
 
 
 BlockedModuleT = nn.Module
@@ -37,6 +39,7 @@ class FeatureDistiller(nn.Module):
         alpha: float = 0.4,
         w_sync: float = 2,
         w_recon: float = 2,
+        w_cross: float = 0.5,
     ):
         """
         temp: temperature for KD
@@ -48,6 +51,8 @@ class FeatureDistiller(nn.Module):
         self.swapnet = swapnet
         self.swapnet.teacher.eval()
         self.swapnet.student.train()
+        self.swapnet.encoders.train()
+        self.swapnet.decoders.train()
 
         # Loss fns
         self.temp = temp
@@ -56,6 +61,7 @@ class FeatureDistiller(nn.Module):
         self.alpha = alpha
         self.w_sync = w_sync
         self.w_recon = w_recon
+        self.w_cross = w_cross
 
     def forward(
         self, pixel_values: torch.Tensor, labels: torch.LongTensor
@@ -106,8 +112,22 @@ class FeatureDistiller(nn.Module):
             loss_feat_recon / max(self.swapnet.num_feat, 1)
         )
 
+        while True:
+            from_teachers = [
+                random.choice([True, False]) for _ in range(self.swapnet.num_blocks)
+            ]
+            # ensure at least one True and one False
+            if any(from_teachers) and not all(from_teachers):
+                break
+
+        cross_logits = self.swapnet(pixel_values, from_teachers)
+
+        loss_cross = self.w_cross * self.ce(cross_logits, labels)
+
         # --- Combine all losses ---
-        total_loss = loss_hard + loss_soft + loss_feat_sync + loss_feat_recon
+        total_loss = (
+            loss_hard + loss_soft + loss_feat_sync + loss_feat_recon + loss_cross
+        )
 
         return DistillerOutput(
             logits=logits_s,
@@ -116,4 +136,5 @@ class FeatureDistiller(nn.Module):
             loss_soft=loss_soft,
             loss_feat_sync=loss_feat_sync,
             loss_feat_recon=loss_feat_recon,
+            loss_cross=loss_cross,
         )

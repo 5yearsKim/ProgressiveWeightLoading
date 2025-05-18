@@ -83,6 +83,7 @@ meter_dict: dict[str, AverageMeter] = {
     "soft": AverageMeter(),
     "feat_sync": AverageMeter(),
     "feat_recon": AverageMeter(),
+    "cross": AverageMeter(),
 }
 
 
@@ -94,11 +95,9 @@ class DistilTrainer(Trainer):
             labels=inputs["labels"],
         )
         loss = outputs["loss"]
-
-        meter_dict["hard"].update(outputs.loss_hard.item())
-        meter_dict["soft"].update(outputs.loss_soft.item())
-        meter_dict["feat_sync"].update(outputs.loss_feat_sync.item())
-        meter_dict["feat_recon"].update(outputs.loss_feat_recon.item())
+        
+        for key in meter_dict.keys():
+            meter_dict[key].update(outputs[f"loss_{key}"].item())
 
         return (loss, outputs) if return_outputs else loss
 
