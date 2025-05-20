@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument(
         "--teacher_path",
         type=str,
-        default="./ckpts/lenet-cifar10/teachers/checkpoint-7038",
+        default="./ckpts/lenet-cifar10/teachers/checkpoint-7820",
         help="Path or model identifier of the pretrained teacher",
     )
     parser.add_argument(
@@ -95,7 +95,7 @@ class DistilTrainer(Trainer):
             labels=inputs["labels"],
         )
         loss = outputs["loss"]
-        
+
         for key in meter_dict.keys():
             meter_dict[key].update(outputs[f"loss_{key}"].item())
 
@@ -150,29 +150,27 @@ def main():
     elif args.model_type == "lenet":
         from torchvision import transforms as T
 
-        from pwl_model.layers.block_module import \
-            BlockModelForImageClassification
-        from pwl_model.lenet5 import LeNet5Config, create_lenet5_blocks
-        from pwl_model.swap_net import SwapNet
+        # from pwl_model.layers.block_net import BlockModelForImageClassification
+        # from pwl_model.layers.swap_net import SwapNet
+        # from pwl_model.lenet5.lenet5 import LeNet5Config, create_lenet5_blocks
+        from pwl_model.models.lenet5 import (
+            BlockLeNet5Config,
+            BlockLeNet5ForImageClassification,
+        )
+        from pwl_model.core.swap_net import SwapNet
 
         mlflow.set_experiment("lenet5-cifar10-distill")
         mlflow.log_param("device", str(device))
 
-        t_config = LeNet5Config()
-        t_blocks, last_out_dim = create_lenet5_blocks(t_config)
-        teacher = BlockModelForImageClassification(
-            blocks=t_blocks, last_out_dim=last_out_dim, num_labels=10
-        )
+        # t_config = BlockLeNet5Config()
+        # teacher = BlockLeNet5ForImageClassification(t_config)
 
-        state_dict = load_file(os.path.join(args.teacher_path, "model.safetensors"))
-        teacher.load_state_dict(state_dict)
+        # state_dict = load_file(os.path.join(args.teacher_path, "model.safetensors"))
+        # teacher.load_state_dict(state_dict)
+        teacher = BlockLeNet5ForImageClassification.from_pretrained(args.teacher_path)
 
-        s_config = LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
-        s_blocks, last_out_dim = create_lenet5_blocks(s_config)
-
-        student = BlockModelForImageClassification(
-            blocks=s_blocks, last_out_dim=last_out_dim, num_labels=10
-        )
+        s_config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
+        student = BlockLeNet5ForImageClassification(s_config)
 
         swapnet = SwapNet(
             teacher=teacher,

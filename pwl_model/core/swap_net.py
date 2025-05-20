@@ -1,15 +1,15 @@
 import torch
 import torch.nn as nn
 
-from .block_net import BlockModelForImageClassification, BlockModule
+from .block_net import BlockNetMixin, BlockModule
 from .feature_converter import FeatureConverter
 
 
 class SwapNet(nn.Module):
     def __init__(
         self,
-        teacher: BlockModelForImageClassification,
-        student: BlockModelForImageClassification,
+        teacher: BlockNetMixin,
+        student: BlockNetMixin,
         input_shape: tuple = (3, 32, 32),
     ):
 
