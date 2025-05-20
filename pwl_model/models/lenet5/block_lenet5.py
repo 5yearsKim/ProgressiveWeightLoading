@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import PretrainedConfig, PreTrainedModel
-from transformers.modeling_outputs import (
-    BaseModelOutput, ImageClassifierOutputWithNoAttention)
+from transformers.modeling_outputs import ImageClassifierOutputWithNoAttention
 
 from pwl_model.core.block_net import BlockModule, BlockNetMixin
 
@@ -87,6 +86,10 @@ class BlockLeNet5ForImageClassification(BlockLeNet5PreTrainedModel):
         )
         # initialize weights and apply final processing
         self.post_init()
+
+    @property
+    def blocks(self):
+        return self.lenet.blocks
 
     def forward(
         self,

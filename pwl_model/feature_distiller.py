@@ -6,8 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers.utils import ModelOutput
 
-from .layers.feature_converter import FeatureConverter
-from .layers.swap_net import SwapNet
+from .core import SwapNet 
 
 
 @dataclass
