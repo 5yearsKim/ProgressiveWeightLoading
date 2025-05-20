@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers.utils import ModelOutput
 
-from .core import SwapNet 
+from . import SwapNet 
 
 
 @dataclass

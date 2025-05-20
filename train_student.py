@@ -11,7 +11,7 @@ from transformers import (AutoImageProcessor, Trainer, TrainerCallback,
 from transformers.integrations import MLflowCallback
 from transformers.trainer_utils import EvalPrediction
 
-from pwl_model.feature_distiller import DistillerOutput, FeatureDistiller
+from pwl_model.core.feature_distiller import DistillerOutput, FeatureDistiller
 from pwl_model.utils.training_utils import AverageMeter
 
 

@@ -4,7 +4,7 @@ import os
 import torch
 from safetensors.torch import load_file as safe_load
 
-from pwl_model.lenet5 import LeNet5Config, LeNet5ForImageClassification
+from pwl_model.models.lenet5 import BlockLeNet5Config, BlockLeNet5ForImageClassification 
 
 
 def parse_args():
@@ -14,7 +14,7 @@ def parse_args():
     )
     parser.add_argument(
         "--distiller_ckpt",
-        default="./ckpts/lenet-cifar10/students/checkpoint-17193",
+        default="./ckpts/lenet-cifar10/students/checkpoint-46890",
         help="Path to the folder (or file) containing distiller)",
     )
     parser.add_argument(
@@ -55,8 +55,8 @@ def main():
         raise ValueError("No keys found with prefix 'swapnet.' – check your checkpoint")
 
     # 3) Instantiate a fresh swapnet
-    config = LeNet5Config(num_labels=args.num_labels)
-    student = LeNet5ForImageClassification(config)
+    config = BlockLeNet5Config(num_labels=args.num_labels)
+    student = BlockLeNet5ForImageClassification(config)
 
     # 4) Load the filtered weights
     missing, unexpected = student.load_state_dict(swapnet_sd, strict=False)
