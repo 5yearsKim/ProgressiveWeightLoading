@@ -4,7 +4,8 @@ import os
 import torch
 from safetensors.torch import load_file as safe_load
 
-from pwl_model.models.lenet5 import BlockLeNet5Config, BlockLeNet5ForImageClassification 
+from pwl_model.models.lenet5 import (BlockLeNet5Config,
+                                     BlockLeNet5ForImageClassification)
 
 
 def parse_args():

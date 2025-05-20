@@ -8,8 +8,8 @@ from safetensors.torch import load_model
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+from pwl_model.core import FeatureDistiller, SwapNet
 from pwl_model.core.feature_distiller import FeatureDistiller
-from pwl_model.core import SwapNet, FeatureDistiller
 
 
 def parse_args():
@@ -53,12 +53,11 @@ def main():
     if args.model_type == "lenet":
         from torchvision import transforms as T
 
-        from pwl_model.models.lenet5 import (
-            BlockLeNet5Config, BlockLeNet5ForImageClassification)
+        from pwl_model.models.lenet5 import (BlockLeNet5Config,
+                                             BlockLeNet5ForImageClassification)
 
         t_config = BlockLeNet5Config()
         teacher = BlockLeNet5ForImageClassification(t_config).to(device)
-        
 
         s_config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
         student = BlockLeNet5ForImageClassification(s_config).to(device)

@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 
 import torch
 import torch.nn as nn
-from transformers.modeling_outputs import (
-    BaseModelOutput )
+from transformers.modeling_outputs import BaseModelOutput
 
 BlockModule = nn.Sequential
+
 
 class BlockNetMixin(ABC):
     def __init__(self, *args, **kwargs):
@@ -34,4 +34,3 @@ class BlockNetMixin(ABC):
                 hidden_states += (x,)
 
         return BaseModelOutput(last_hidden_state=x, hidden_states=hidden_states)
-

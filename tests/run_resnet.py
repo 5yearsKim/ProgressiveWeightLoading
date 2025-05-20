@@ -1,29 +1,38 @@
-from pwl_model.resnet import ResNetFeatureDistiller
-from transformers import ResNetForImageClassification, ResNetConfig
-
-TEACHER_PATH = './ckpts/resnet/resnet18'
-teacher = ResNetForImageClassification.from_pretrained(TEACHER_PATH)
-teacher_config = teacher.config
-
-_t = teacher_config
-student_config = ResNetConfig(
-    num_channels=_t.num_channels,
-    hidden_sizes=_t.hidden_sizes,
-    embedding_size=_t.embedding_size,
-    depths=[max(1, d // 2) for d in _t.depths],          
-    layer_type=_t.layer_type,
-    hidden_act=_t.hidden_act,
-    downsample_in_first_stage=_t.downsample_in_first_stage,
-    downsample_in_bottleneck=_t.downsample_in_bottleneck,
-)
-student = ResNetForImageClassification(student_config)
-
-distiller = ResNetFeatureDistiller(student, teacher)
-
-
 import torch
+from pwl_model.models.resnet import BlockResNetConfig, BlockResNetModel, BlockResNetForImageClassification
+from torchsummary import summary
 
-mock_pixel_value = torch.zeros([1, 3, 480, 640])
 
-out = distiller(mock_pixel_value)
-print(out)
+
+block_config = BlockResNetConfig.from_pretrained("microsoft/resnet-18")
+# model = BlockResNetModel(config)
+block_model = BlockResNetForImageClassification(block_config)
+
+
+def forward_fn(model, x):
+    pixel_value = torch.zeros([1, 3, 224, 224])
+
+    out = model(pixel_value)
+
+    print(out.logits.shape)
+
+def print_state_dict(model):
+    sd = model.state_dict()
+    for name, tensor in sd.items():
+        print(f"{name:30s} {tuple(tensor.shape)}")
+
+def compare_original_resnet():
+    from transformers import AutoModelForImageClassification
+
+    ms_resnet = AutoModelForImageClassification.from_pretrained("microsoft/resnet-18")
+
+    print ('-------block model-------')
+    print_state_dict(block_model)
+    print ('-------ms model-------')
+    print_state_dict(ms_resnet)
+
+
+
+
+if __name__ == "__main__":
+    compare_original_resnet()

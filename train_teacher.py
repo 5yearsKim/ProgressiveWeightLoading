@@ -1,109 +1,146 @@
+import argparse
+
 import mlflow
+import numpy as np
 import torch
-from datasets import load_dataset
-from torchvision import transforms as T
 from transformers import Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
 
-from pwl_model.models.lenet5 import (BlockLeNet5Config,
-                                     BlockLeNet5ForImageClassification)
-
-EPOCHS = 40
-LEARNING_RATE = 3e-3
-BATCH_SIZE = 128
-RESUME_FROM_CHECKPOINT = False
-IS_SAMPLE = False
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-mlflow.set_experiment("lenet5-cifar10-teacher")
-mlflow.log_param("device", str(device))
+from pwl_experiments import prepare_experiment
+from pwl_model.models.lenet5 import BlockLeNet5Config
 
 
-config = BlockLeNet5Config()
-model = BlockLeNet5ForImageClassification(config).to(device)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Train a BlockNet teacher model with MLflow integration"
+    )
 
-transform = T.Compose(
-    [
-        T.ToTensor(),  # [0,1]
-        T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
-    ]
-)
+    parser.add_argument(
+        "--model_type",
+        choices=["lenet5", "resnet"],
+        default="lenet5",
+        help="Type of model to train: lenet5 or resnet",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=40,
+        help="Number of training epochs",
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=3e-3,
+        help="Learning rate for optimizer",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=128,
+        help="Batch size per device",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        action="store_true",
+        help="Resume training from latest checkpoint",
+    )
+    parser.add_argument(
+        "--is_sample",
+        action="store_true",
+        help="Run training on a small sample of the dataset",
+    )
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        default="lenet5-cifar10-teacher",
+        help="MLflow experiment name",
+    )
+    parser.add_argument(
+        "--save_path",
+        type=str,
+        default="./ckpts/lenet-cifar10/teachers",
+        help="Directory to save model checkpoints",
+    )
+
+    return parser.parse_args()
 
 
-def preprocess(batch):
-    tensor_list = []
-    for arr in batch["img"]:
-        img = arr.convert("RGB")
-        tensor_list.append(transform(img))
-    batch["pixel_values"] = torch.stack(tensor_list)
-    batch["labels"] = batch["label"]
-    return batch
+def main():
+    args = parse_args()
+
+    # device setup
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # MLflow configuration
+    mlflow.set_experiment(args.experiment_name)
+    mlflow.log_param("device", str(device))
+    mlflow.log_param("model_type", args.model_type)
+    mlflow.log_param("epochs", args.epochs)
+    mlflow.log_param("learning_rate", args.learning_rate)
+    mlflow.log_param("batch_size", args.batch_size)
+
+    # prepare configuration and experiment
+    if args.model_type == "lenet5":
+        config = BlockLeNet5Config()
+        teacher_from = config
+        student_from = None
+    elif args.model_type == "resnet":
+        raise NotImplementedError("ResNet model type is not implemented yet.")
+    else:
+        raise ValueError(f"Unknown model type: {args.model_type}")
+
+    e_set = prepare_experiment(
+        args.model_type,
+        teacher_from=teacher_from,
+        student_from=student_from,
+        use_swapnet=False,
+    )
+
+    model = e_set.teacher.to(device)
+    ds_train = e_set.dataset.train
+    ds_eval = e_set.dataset.eval
+
+    if args.is_sample:
+        ds_train = ds_train.select(range(500))
+        ds_eval = ds_eval.select(range(100))
+
+    def compute_metrics(p):
+        preds = np.argmax(p.predictions, axis=1)
+        return {"accuracy": (preds == p.label_ids).mean()}
+
+    # Training arguments
+    training_args = TrainingArguments(
+        output_dir=args.save_path,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        num_train_epochs=args.epochs,
+        save_strategy="epoch",
+        logging_strategy="epoch",
+        eval_strategy="epoch",
+        report_to=["mlflow"],
+        logging_dir="./runs",
+        load_best_model_at_end=True,
+        metric_for_best_model="accuracy",
+        greater_is_better=True,
+        save_total_limit=1,
+        remove_unused_columns=False,
+    )
+
+    print("Training start...")
+
+    # Trainer instantiation
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=ds_train,
+        eval_dataset=ds_eval,
+        compute_metrics=compute_metrics,
+        callbacks=[MLflowCallback()],
+    )
+
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
 
-ds = load_dataset("uoft-cs/cifar10")
-
-print("processing train set")
-ds_train = ds["train"].map(
-    # ds_train = ds["train"].select(range(1000)).map(
-    preprocess,
-    batched=True,
-    batch_size=64,
-    remove_columns=["img", "label"],
-)
-
-print("processing test set")
-ds_test = ds["test"].map(
-    # ds_test = ds["test"].select(range(100)).map(
-    preprocess,
-    batched=True,
-    batch_size=64,
-    remove_columns=["img", "label"],
-)
-
-
-if IS_SAMPLE:
-    ds_train = ds_train.select(range(500))
-    ds_test = ds_test.select(range(100))
-
-# accuracy metric
-import numpy as np
-
-
-def compute_metrics(p):
-    preds = np.argmax(p.predictions, axis=1)
-    return {"accuracy": (preds == p.label_ids).mean()}
-
-
-# training args
-training_args = TrainingArguments(
-    output_dir="./ckpts/lenet-cifar10/teacher_training",
-    per_device_train_batch_size=BATCH_SIZE,
-    per_device_eval_batch_size=BATCH_SIZE,
-    learning_rate=LEARNING_RATE,
-    num_train_epochs=EPOCHS,
-    save_strategy="epoch",
-    logging_strategy="epoch",
-    eval_strategy="epoch",
-    report_to=["mlflow"],
-    logging_dir="./runs",
-    load_best_model_at_end=True,
-    metric_for_best_model="accuracy",
-    greater_is_better=True,
-    save_total_limit=1,
-    remove_unused_columns=False,
-)
-
-print("training start..")
-
-# instantiate and run
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=ds_train,
-    eval_dataset=ds_test,
-    compute_metrics=compute_metrics,
-    callbacks=[MLflowCallback()],
-)
-
-trainer.train(resume_from_checkpoint=RESUME_FROM_CHECKPOINT)
+if __name__ == "__main__":
+    main()
