@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .block_net import BlockNetMixin, BlockModule
+from .block_net import BlockModule, BlockNetMixin
 from .feature_converter import FeatureConverter
 
 

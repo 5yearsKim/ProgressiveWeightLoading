@@ -4,13 +4,12 @@ import os
 import mlflow
 import numpy as np
 import torch
-from datasets import load_dataset
-from safetensors.torch import load_file
-from transformers import (AutoImageProcessor, Trainer, TrainerCallback,
-                          TrainerControl, TrainerState, TrainingArguments)
+from transformers import (Trainer, TrainerCallback, TrainerControl,
+                          TrainerState, TrainingArguments)
 from transformers.integrations import MLflowCallback
 from transformers.trainer_utils import EvalPrediction
 
+from pwl_experiments import prepare_experiment
 from pwl_model.core.feature_distiller import DistillerOutput, FeatureDistiller
 from pwl_model.utils.training_utils import AverageMeter
 
@@ -23,8 +22,8 @@ def parse_args():
     parser.add_argument(
         "--model_type",
         type=str,
-        choices=["resnet", "lenet"],
-        default="lenet",
+        choices=["resnet", "lenet5"],
+        default="lenet5",
         help="Model type",
     )
     parser.add_argument(
@@ -32,6 +31,12 @@ def parse_args():
         type=str,
         default="./ckpts/lenet-cifar10/teachers/checkpoint-7820",
         help="Path or model identifier of the pretrained teacher",
+    )
+    parser.add_argument(
+        "--student_path",
+        type=str,
+        default="./ckpts/lenet-cifar10/students/base_config",
+        help="Path for the student config",
     )
     parser.add_argument(
         "--dataset_name",
@@ -130,92 +135,28 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.model_type == "resnet":
-        from transformers import ResNetConfig, ResNetForImageClassification
-
-        # 1. Load teacher & build student config
-        teacher = ResNetForImageClassification.from_pretrained(args.teacher_path)
-        teacher_cfg = teacher.config
-
-        student_cfg = ResNetConfig(**teacher_cfg.to_dict())
-        student_cfg.depths = [max(1, d // 2) for d in student_cfg.depths]
-        student = ResNetForImageClassification(student_cfg)
-
-        processor = AutoImageProcessor.from_pretrained(args.teacher_path)
-
-        def preprocess(batch):
-            inputs = processor(batch["image"], return_tensors="pt")
-            batch["pixel_values"] = inputs["pixel_values"]
-            return batch
-
-    elif args.model_type == "lenet":
-        from torchvision import transforms as T
-
-        # from pwl_model.layers.block_net import BlockModelForImageClassification
-        # from pwl_model.layers.swap_net import SwapNet
-        # from pwl_model.lenet5.lenet5 import LeNet5Config, create_lenet5_blocks
-        from pwl_model.models.lenet5 import (
-            BlockLeNet5Config,
-            BlockLeNet5ForImageClassification,
-        )
-        from pwl_model.core.swap_net import SwapNet
-
-        mlflow.set_experiment("lenet5-cifar10-distill")
+        mlflow.set_experiment("resnet18-tiny-imagenet-distill")
         mlflow.log_param("device", str(device))
 
-        # t_config = BlockLeNet5Config()
-        # teacher = BlockLeNet5ForImageClassification(t_config)
-
-        # state_dict = load_file(os.path.join(args.teacher_path, "model.safetensors"))
-        # teacher.load_state_dict(state_dict)
-        teacher = BlockLeNet5ForImageClassification.from_pretrained(args.teacher_path)
-
-        s_config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
-        student = BlockLeNet5ForImageClassification(s_config)
-
-        swapnet = SwapNet(
-            teacher=teacher,
-            student=student,
-            input_shape=(3, 32, 32),
-        )
-
-        transform = T.Compose(
-            [
-                T.ToTensor(),  # [0,1]
-                T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
-            ]
-        )
-
-        def preprocess(batch):
-            tensor_list = []
-            for arr in batch["img"]:
-                img = arr.convert("RGB")
-                tensor_list.append(transform(img))
-            batch["pixel_values"] = torch.stack(tensor_list)
-            batch["labels"] = batch["label"]
-            return batch
-
+    elif args.model_type == "lenet5":
+        mlflow.set_experiment("lenet5-cifar10-distill")
+        mlflow.log_param("device", str(device))
     else:
         raise ValueError(f"{args.model_type} not defined")
 
-    ds = load_dataset(args.dataset_name)
-    ds_train = ds["train"].map(
-        preprocess,
-        batched=True,
-        batch_size=32,
-        remove_columns=["img", "label"],
+    e_set = prepare_experiment(
+        args.model_type,
+        teacher_from=args.teacher_path,
+        student_from=args.student_path,
     )
-    ds_val = ds["test"].map(
-        preprocess,
-        batched=True,
-        batch_size=32,
-        remove_columns=[
-            "img",
-            "label",
-        ],  # 'pixel_values' and 'labels' goes to input
-    )
+
+    swapnet = e_set.swapnet
+    ds_train = e_set.dataset.train
+    ds_eval = e_set.dataset.eval
+
     if args.is_sample:
         ds_train = ds_train.select(range(500))
-        ds_val = ds_val.select(range(100))
+        ds_eval = ds_eval.select(range(100))
 
     distiller = FeatureDistiller(
         swapnet=swapnet,
@@ -253,7 +194,7 @@ def main():
         model=distiller,
         args=training_args,
         train_dataset=ds_train,
-        eval_dataset=ds_val,
+        eval_dataset=ds_eval,
         compute_metrics=compute_metrics,
         callbacks=[MLflowCallback(), MeterCallback()],
     )
