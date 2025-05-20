@@ -1,13 +1,12 @@
 import mlflow
 import torch
-import torch.nn as nn
 from datasets import load_dataset
 from torchvision import transforms as T
 from transformers import Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
 
-from pwl_model.layers.block_module import BlockModelForImageClassification
-from pwl_model.lenet5 import LeNet5Config, create_lenet5_blocks
+from pwl_model.models.lenet5 import (BlockLeNet5Config,
+                                     BlockLeNet5ForImageClassification)
 
 EPOCHS = 40
 LEARNING_RATE = 3e-3
@@ -20,12 +19,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 mlflow.set_experiment("lenet5-cifar10-teacher")
 mlflow.log_param("device", str(device))
 
-config = LeNet5Config()
-blocks, last_out_dim = create_lenet5_blocks(config)
-model = BlockModelForImageClassification(
-    blocks=blocks, last_out_dim=last_out_dim, num_labels=10
-).to(device)
 
+config = BlockLeNet5Config()
+model = BlockLeNet5ForImageClassification(config).to(device)
 
 transform = T.Compose(
     [

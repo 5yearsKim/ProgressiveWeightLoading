@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from .layers.block_module import BlockModelForImageClassification, BlockModule
-from .layers.feature_converter import FeatureConverter
+from .block_net import BlockModelForImageClassification, BlockModule
+from .feature_converter import FeatureConverter
 
 
 class SwapNet(nn.Module):
