@@ -115,3 +115,23 @@ class ResNetFeatureDistiller(nn.Module):
             + self.beta * loss_feat
         )
         return {"loss": loss, "logits": logits_s}
+
+
+from transformers import ResNetConfig, ResNetForImageClassification
+
+
+def create_resnet_blocks(config: ResNetConfig) -> tuple[list[nn.Module], int]:
+    resnet_blocks = [
+        nn.Conv2d(config.in_channels, config.cnn_channels[0], kernel_size=7, stride=2),
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=3, stride=2),
+        nn.Conv2d(
+            config.cnn_channels[0], config.cnn_channels[1], kernel_size=3, stride=1
+        ),
+        nn.ReLU(),
+        nn.Conv2d(
+            config.cnn_channels[1], config.cnn_channels[2], kernel_size=3, stride=1
+        ),
+        nn.ReLU(),
+    ]
+    return resnet_blocks, config.fc_sizes[-1]
