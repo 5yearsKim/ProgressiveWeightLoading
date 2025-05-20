@@ -7,10 +7,9 @@ from datasets import load_dataset
 from safetensors.torch import load_model
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from transformers import AutoImageProcessor, Trainer, TrainingArguments
 
-from pwl_model.feature_distiller import FeatureDistiller
-from pwl_model.swap_net import SwapNet
+from pwl_model.core.feature_distiller import FeatureDistiller
+from pwl_model.core import SwapNet, FeatureDistiller
 
 
 def parse_args():
@@ -28,7 +27,7 @@ def parse_args():
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./ckpts/lenet-cifar10/students/checkpoint-17193",
+        default="./ckpts/lenet-cifar10/students/checkpoint-31260",
         help="Path or model identifier of the model",
     )
     parser.add_argument(
@@ -51,40 +50,18 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.model_type == "resnet":
-        from transformers import ResNetConfig, ResNetForImageClassification
-
-        model = ResNetForImageClassification.from_pretrained(args.teacher_path)
-
-        processor = AutoImageProcessor.from_pretrained(args.teacher_path)
-
-        def preprocess(batch):
-            inputs = processor(batch["image"], return_tensors="pt")
-            batch["pixel_values"] = inputs["pixel_values"]
-            return batch
-
-    elif args.model_type == "lenet":
+    if args.model_type == "lenet":
         from torchvision import transforms as T
 
-        from pwl_model.layers.block_module import \
-            BlockModelForImageClassification
-        from pwl_model.lenet5 import LeNet5Config, create_lenet5_blocks
+        from pwl_model.models.lenet5 import (
+            BlockLeNet5Config, BlockLeNet5ForImageClassification)
 
-        t_blocks, last_out_dim = create_lenet5_blocks(LeNet5Config())
-        teacher = BlockModelForImageClassification(
-            blocks=t_blocks,
-            last_out_dim=last_out_dim,
-            num_labels=10,
-        ).to(device)
+        t_config = BlockLeNet5Config()
+        teacher = BlockLeNet5ForImageClassification(t_config).to(device)
+        
 
-        s_blocks, last_out_dim = create_lenet5_blocks(
-            LeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
-        )
-        student = BlockModelForImageClassification(
-            blocks=s_blocks,
-            last_out_dim=last_out_dim,
-            num_labels=10,
-        ).to(device)
+        s_config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
+        student = BlockLeNet5ForImageClassification(s_config).to(device)
 
         swapnet = SwapNet(
             teacher=teacher,
