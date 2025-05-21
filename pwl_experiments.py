@@ -6,7 +6,7 @@ from typing import Callable, Literal, Optional, TypeVar
 import torch
 from datasets import load_dataset
 from torch import nn
-from torchvision import datasets
+from torchvision import transforms as T
 from transformers import AutoImageProcessor
 
 TemplateModel = TypeVar("TM")
@@ -40,7 +40,7 @@ def looks_like_checkpoint_dir(path: str) -> bool:
     return has_bin or has_safe
 
 
-def load_model(
+def load_block_model(
     model_from: str | None,
     model_for_image_classification: TemplateModel,
     model_config: TemplateConfig,
@@ -68,17 +68,16 @@ def prepare_experiment(
     e_set = ExperimentSet()
 
     if model_type == "lenet5":
-        from torchvision import transforms as T
 
         from pwl_model.core import SwapNet
         from pwl_model.models.lenet5 import (BlockLeNet5Config,
                                              BlockLeNet5ForImageClassification)
 
         # Create the teacher and student models
-        teacher = load_model(
+        teacher = load_block_model(
             teacher_from, BlockLeNet5ForImageClassification, BlockLeNet5Config
         )
-        student = load_model(
+        student = load_block_model(
             student_from, BlockLeNet5ForImageClassification, BlockLeNet5Config
         )
         e_set.teacher = teacher
@@ -144,17 +143,17 @@ def prepare_experiment(
                                              BlockResNetForImageClassification)
 
         # Create the teacher and student models
-        teacher = load_model(
+        teacher = load_block_model(
             teacher_from, BlockResNetForImageClassification, BlockResNetConfig
         )
-        student = load_model(
+        student = load_block_model(
             student_from, BlockResNetForImageClassification, BlockResNetConfig
         )
         e_set.teacher = teacher
         e_set.student = student
 
         if use_swapnet:
-            INPUT_SHAPE = (3, 224, 224)
+            INPUT_SHAPE = (3, 32, 32)
             assert teacher is not None, "Teacher model is not loaded."
             assert student is not None, "Student model is not loaded."
             swapnet = SwapNet(
@@ -165,62 +164,50 @@ def prepare_experiment(
             e_set.swapnet = swapnet
 
         if use_dataset:
-            image_processor = AutoImageProcessor.from_pretrained(
-                "microsoft/resnet-18", use_fast=True
+            DATASET_NAME = "cifar100"
+            PREPROCESS_BATCH_SIZE = 64
+
+            transform = T.Compose(
+                [
+                    T.ToTensor(),  # [0,1]
+                    T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
+                ]
             )
 
-            def hf_transform(pil_img):
-                # image_processor returns pixel_values shape=(1, C, H, W)
-                pv = image_processor(
-                    images=[pil_img.convert("RGB")], return_tensors="pt"
-                )["pixel_values"]
-                return pv.squeeze(0)  # → Tensor[C,H,W]
+            def preprocess(batch):
 
-            ds_train = datasets.ImageFolder(
-                "data/imagenet/train",
-                transform=hf_transform,
+                tensor_list = []
+                for arr in batch["img"]:
+                    img = arr.convert("RGB")
+                    tensor_list.append(transform(img))
+                batch["pixel_values"] = torch.stack(tensor_list)
+                batch["labels"] = batch["fine_label"]
+                return batch
+
+            ds = load_dataset(DATASET_NAME)
+
+            ds_train = ds["train"].map(
+                preprocess,
+                batched=True,
+                batch_size=PREPROCESS_BATCH_SIZE,
+                remove_columns=["img", "fine_label", "coarse_label"],
             )
-            ds_val = datasets.ImageFolder("data/imagenet/val", transform=hf_transform)
-
-            def collate_fn(batch):
-                pixel_vals, labels = zip(*batch)
-
-                # stack into one tensor
-                pixel_values = torch.stack(pixel_vals, dim=0)  # → [B, C, H, W]
-                labels = torch.tensor(labels, dtype=torch.long)  # → [B]
-
-                return {"pixel_values": pixel_values, "labels": labels}
-
-            # PREPROCESS_BATCH_SIZE = 128
-            # ds = load_dataset("imagefolder", data_dir="./data/imagenet", )
-
-            # def preprocess(batch):
-            #     # examples["image"] is a list of PIL images
-            #     outputs = image_processor(
-            #         images=[img.convert("RGB") for img in batch["image"]],
-            #         return_tensors="pt",
-            #     )
-            #     return {"pixel_values": outputs["pixel_values"], "labels": batch["label"]}
-
-            # ds_train = ds["train"].map(
-            #     preprocess,
-            #     batched=True,
-            #     batch_size=PREPROCESS_BATCH_SIZE,
-            #     remove_columns=["image", "label"],
-            # )
-
-            # ds_val = ds["validation"].map(
-            #     preprocess,
-            #     batched=True,
-            #     batch_size=PREPROCESS_BATCH_SIZE,
-            #     remove_columns=["image", "label"],
-            # )
-
+            ds_val = ds["test"].map(
+                preprocess,
+                batched=True,
+                batch_size=PREPROCESS_BATCH_SIZE,
+                remove_columns=["img", "fine_label", "coarse_label"],
+            )
             e_set.dataset = ExperimentDataset(
-                name="imagenet",
+                name=DATASET_NAME,
                 train=ds_train,
                 eval=ds_val,
-                collate_fn=collate_fn,
+            )
+
+            e_set.dataset = ExperimentDataset(
+                name=DATASET_NAME,
+                train=ds_train,
+                eval=ds_val,
             )
 
     else:

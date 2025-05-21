@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=3e-3,
+        default=2e-3,
         help="Learning rate for optimizer",
     )
     parser.add_argument(
@@ -51,6 +51,12 @@ def parse_args():
         "--experiment_name",
         type=str,
         help="MLflow experiment name",
+    )
+    parser.add_argument(
+        "--pretrained_path",
+        type=str,
+        default=None,
+        help="Directory to save model checkpoints",
     )
     parser.add_argument(
         "--save_path",
@@ -81,29 +87,15 @@ def main():
     mlflow.log_param("batch_size", args.batch_size)
 
     # prepare configuration and experiment
-    if args.model_type == "lenet5":
-        from pwl_model.models.lenet5 import BlockLeNet5Config
-
-        config = BlockLeNet5Config()
-        teacher_from = config
-        student_from = None
-    elif args.model_type == "resnet":
-        from pwl_model.models.resnet import BlockResNetConfig
-
-        if args.eval_only:
-            teacher_from = "./ckpts/resnet/teacher/ms_resnet_18"
-            student_from = None
-        else:
-            teacher_from = BlockResNetConfig()
-            student_from = None
-
+    if args.pretrained_path is None:
+        raise NotImplementedError("not implemented yet")
     else:
-        raise ValueError(f"Unknown model type: {args.model_type}")
+        teacher_from = args.pretrained_path
 
     e_set = prepare_experiment(
         args.model_type,
         teacher_from=teacher_from,
-        student_from=student_from,
+        student_from=None,
         use_swapnet=False,
     )
 
