@@ -1,5 +1,5 @@
 from transformers import AutoModelForImageClassification, AutoImageProcessor
-from pwl_model.models.resnet import BlockResNetForImageClassification, convert_hf_to_block_resnet
+from pwl_model.models.resnet import BlockResNetForImageClassification, convert_hf_to_block_resnet, check_weight_same_resnet 
 
 
 SAVE_PATH = './ckpts/resnet/teacher/ms_resnet_18'
@@ -13,6 +13,9 @@ block_state_dict = convert_hf_to_block_resnet(hf_state_dict)
 config = hf_resnet.config
 block_resnet = BlockResNetForImageClassification(config)
 block_resnet.load_state_dict(block_state_dict, strict=False)
+
+
+check_weight_same_resnet(block_resnet.state_dict(), hf_resnet.state_dict())
 
 block_resnet.save_pretrained(SAVE_PATH)
 hf_image_processor.save_pretrained(SAVE_PATH)

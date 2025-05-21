@@ -91,7 +91,7 @@ def main():
         from pwl_model.models.resnet import BlockResNetConfig
 
         if args.eval_only:
-            teacher_from = './ckpts/resnet/teacher/ms_resnet_18'
+            teacher_from = "./ckpts/resnet/teacher/ms_resnet_18"
             student_from = None
         else:
             teacher_from = BlockResNetConfig()
