@@ -83,6 +83,10 @@ class BlockResNetForImageClassification(BlockResNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @property
+    def blocks(self) -> list[BlockModule]:
+        return self.resnet.blocks
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,

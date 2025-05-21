@@ -7,7 +7,6 @@ from transformers import Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
 
 from pwl_experiments import prepare_experiment
-from pwl_model.models.lenet5 import BlockLeNet5Config
 
 
 def parse_args():
@@ -18,7 +17,6 @@ def parse_args():
     parser.add_argument(
         "--model_type",
         choices=["lenet5", "resnet"],
-        default="lenet5",
         help="Type of model to train: lenet5 or resnet",
     )
     parser.add_argument(
@@ -52,14 +50,17 @@ def parse_args():
     parser.add_argument(
         "--experiment_name",
         type=str,
-        default="lenet5-cifar10-teacher",
         help="MLflow experiment name",
     )
     parser.add_argument(
         "--save_path",
         type=str,
-        default="./ckpts/lenet-cifar10/teachers",
         help="Directory to save model checkpoints",
+    )
+    parser.add_argument(
+        "--eval_only",
+        action="store_true",
+        help="run 1 time evaluation only",
     )
 
     return parser.parse_args()
@@ -81,11 +82,21 @@ def main():
 
     # prepare configuration and experiment
     if args.model_type == "lenet5":
+        from pwl_model.models.lenet5 import BlockLeNet5Config
+
         config = BlockLeNet5Config()
         teacher_from = config
         student_from = None
     elif args.model_type == "resnet":
-        raise NotImplementedError("ResNet model type is not implemented yet.")
+        from pwl_model.models.resnet import BlockResNetConfig
+
+        if args.eval_only:
+            teacher_from = './ckpts/resnet/teacher/ms_resnet_18'
+            student_from = None
+        else:
+            teacher_from = BlockResNetConfig()
+            student_from = None
+
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")
 
@@ -99,6 +110,7 @@ def main():
     model = e_set.teacher.to(device)
     ds_train = e_set.dataset.train
     ds_eval = e_set.dataset.eval
+    collate_fn = e_set.dataset.collate_fn
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))
@@ -135,9 +147,16 @@ def main():
         args=training_args,
         train_dataset=ds_train,
         eval_dataset=ds_eval,
+        data_collator=collate_fn,
         compute_metrics=compute_metrics,
         callbacks=[MLflowCallback()],
     )
+
+    if args.eval_only:
+        # just run evaluation one time and exit
+        metrics = trainer.evaluate()
+        print(f"*** Eval metrics: {metrics} ***")
+        return
 
     trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 

@@ -23,32 +23,21 @@ def parse_args():
         "--model_type",
         type=str,
         choices=["resnet", "lenet5"],
-        default="lenet5",
         help="Model type",
     )
     parser.add_argument(
         "--teacher_path",
         type=str,
-        default="./ckpts/lenet-cifar10/teachers/checkpoint-7820",
         help="Path or model identifier of the pretrained teacher",
     )
     parser.add_argument(
         "--student_path",
         type=str,
-        default="./ckpts/lenet-cifar10/students/base_config",
         help="Path for the student config",
-    )
-    parser.add_argument(
-        "--dataset_name",
-        type=str,
-        choices=["zh-plus/tiny-imagenet", "uoft-cs/cifar10"],
-        default="uoft-cs/cifar10",
-        help="🤗 dataset identifier (e.g. 'zh-plus/tiny-imagenet')",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./ckpts/lenet-cifar10/student_training",
         help="Where to save distilled checkpoints",
     )
     parser.add_argument(
@@ -106,6 +95,25 @@ class DistilTrainer(Trainer):
 
         return (loss, outputs) if return_outputs else loss
 
+    def save_model(self, output_dir: str | None = None, _internal_call: bool = False):
+        super().save_model(output_dir, _internal_call)
+
+        swapnet = self.model.swapnet
+
+        # student
+        student_cfg = swapnet.student.config
+
+        student_dir = os.path.join(output_dir, "student_config")
+        os.makedirs(student_dir, exist_ok=True)
+        student_cfg.save_pretrained(student_dir)
+
+        # teacher
+        teacher_cfg = swapnet.teacher.config
+
+        teacher_dir = os.path.join(output_dir, "teacher_config")
+        os.makedirs(teacher_dir, exist_ok=True)
+        teacher_cfg.save_pretrained(teacher_dir)
+
 
 class MeterCallback(TrainerCallback):
     def on_epoch_end(
@@ -153,6 +161,7 @@ def main():
     swapnet = e_set.swapnet
     ds_train = e_set.dataset.train
     ds_eval = e_set.dataset.eval
+    collate_fn = e_set.dataset.collate_fn
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))
@@ -195,6 +204,7 @@ def main():
         args=training_args,
         train_dataset=ds_train,
         eval_dataset=ds_eval,
+        data_collator=collate_fn,
         compute_metrics=compute_metrics,
         callbacks=[MLflowCallback(), MeterCallback()],
     )

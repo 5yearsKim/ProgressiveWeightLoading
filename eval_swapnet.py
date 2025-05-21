@@ -1,5 +1,6 @@
 import argparse
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -8,6 +9,7 @@ from safetensors.torch import load_model
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+from pwl_experiments import prepare_experiment
 from pwl_model.core import FeatureDistiller, SwapNet
 from pwl_model.core.feature_distiller import FeatureDistiller
 
@@ -20,22 +22,13 @@ def parse_args():
     parser.add_argument(
         "--model_type",
         type=str,
-        choices=["resnet", "lenet"],
-        default="lenet",
+        choices=["resnet", "lenet5"],
         help="Model type",
     )
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./ckpts/lenet-cifar10/students/checkpoint-31260",
         help="Path or model identifier of the model",
-    )
-    parser.add_argument(
-        "--dataset_name",
-        type=str,
-        choices=["zh-plus/tiny-imagenet", "uoft-cs/cifar10"],
-        default="uoft-cs/cifar10",
-        help="🤗 dataset identifier (e.g. 'zh-plus/tiny-imagenet')",
     )
     parser.add_argument(
         "--batch_size",
@@ -43,6 +36,7 @@ def parse_args():
         default=256,
         help="Batch size per device",
     )
+    parser.add_argu
     return parser.parse_args()
 
 
@@ -50,56 +44,28 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.model_type == "lenet":
+    if args.model_type == "lenet5":
         from torchvision import transforms as T
 
-        from pwl_model.models.lenet5 import (BlockLeNet5Config,
-                                             BlockLeNet5ForImageClassification)
+        model_path = Path(args.model_path)
 
-        t_config = BlockLeNet5Config()
-        teacher = BlockLeNet5ForImageClassification(t_config).to(device)
-
-        s_config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84])
-        student = BlockLeNet5ForImageClassification(s_config).to(device)
-
-        swapnet = SwapNet(
-            teacher=teacher,
-            student=student,
-            input_shape=(3, 32, 32),
+        e_set = prepare_experiment(
+            model_type="lenet5",
+            teacher_from=model_path / "teacher_config",
+            student_from=model_path / "student_config",
         )
+
+        swapnet = e_set.swapnet.to(device)
+        eval_ds = e_set.dataset.eval
+
         distiller = FeatureDistiller(swapnet=swapnet)
-
-        load_model(distiller, os.path.join(args.model_path, "model.safetensors"))
-
-        transform = T.Compose(
-            [
-                T.ToTensor(),  # [0,1]
-                T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
-            ]
+        load_model(
+            distiller,
+            model_path / "model.safetensors",
         )
-
-        def preprocess(batch):
-            tensor_list = []
-            for arr in batch["img"]:
-                img = arr.convert("RGB")
-                tensor_list.append(transform(img))
-            batch["pixel_values"] = torch.stack(tensor_list)
-            batch["labels"] = batch["label"]
-            return batch
 
     else:
         raise ValueError(f"{args.model_type} not defined")
-
-    ds = load_dataset(args.dataset_name)
-    ds_val = ds["test"].map(
-        preprocess,
-        batched=True,
-        batch_size=32,
-        remove_columns=[
-            "img",
-            "label",
-        ],  # 'pixel_values' and 'labels' goes to input
-    )
 
     def collate_fn(batch):
         pixels = torch.stack(
@@ -111,7 +77,7 @@ def main():
         return {"pixel_values": pixels, "labels": labels}
 
     eval_loader = DataLoader(
-        ds_val,
+        eval_ds,
         batch_size=args.batch_size,
         shuffle=False,
         collate_fn=collate_fn,
