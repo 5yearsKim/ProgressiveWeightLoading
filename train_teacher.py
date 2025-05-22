@@ -4,10 +4,10 @@ import mlflow
 import numpy as np
 import torch
 import torch.optim as optim
-from transformers import Trainer, TrainingArguments, SchedulerType
+from transformers import SchedulerType, Trainer, TrainingArguments
 from transformers.integrations import MLflowCallback
 
-from pwl_model.lab import prepare_experiment
+from pwl_model.lab import ExperimentComposer
 
 
 def parse_args():
@@ -19,6 +19,11 @@ def parse_args():
         "--model_type",
         choices=["lenet5", "resnet"],
         help="Type of model to train: lenet5 or resnet",
+    )
+    parser.add_argument(
+        "--data_type",
+        choices=["cifar10", "cifar100"],
+        help="dataset to use for training",
     )
     parser.add_argument(
         "--epochs",
@@ -87,29 +92,35 @@ def main():
     mlflow.log_param("learning_rate", args.lr)
     mlflow.log_param("batch_size", args.bs)
 
+    e_composer = ExperimentComposer()
+
     # prepare configuration and experiment
     teacher_from = args.pretrained_path
 
-    e_set = prepare_experiment(
+    e_dset = e_composer.prepare_data(args.data_type)
+
+    e_model = e_composer.prepare_model(
         args.model_type,
         teacher_from=teacher_from,
         student_from=None,
         use_swapnet=False,
     )
 
-    model = e_set.teacher.to(device)
-    ds_train = e_set.dataset.train
-    ds_eval = e_set.dataset.eval
-    collate_fn = e_set.dataset.collate_fn
+    model = e_model.teacher.to(device)
+
+    ds_train = e_dset.train
+    ds_eval = e_dset.eval
+    collate_fn = e_dset.collate_fn
 
     optimizer = optim.SGD(
         model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4
     )
-    # optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=5e-4)
 
     epoch_steps = 50000 // args.bs
 
-    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr /20, 1e-5)) #learning rate decay
+    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr / 20, 1e-5)
+    )
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))

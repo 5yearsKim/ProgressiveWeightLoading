@@ -41,3 +41,43 @@ class CIFAR100TorchDataset(Dataset):
             "pixel_values": self.transform(img),
             "labels": item["fine_label"],
         }
+
+
+class CIFAR10TorchDataset(Dataset):
+    # CIFAR-10 normalization stats
+    MEAN = (0.4914, 0.4822, 0.4465)
+    STD = (0.2470, 0.2435, 0.2616)
+
+    def __init__(self, stage: Literal["train", "eval"]):
+        if stage == "train":
+            self.ds = load_dataset("cifar10", split="train")
+            self.transform = T.Compose(
+                [
+                    T.RandomRotation(15),
+                    T.RandomHorizontalFlip(),
+                    T.RandomCrop(32, padding=4, padding_mode="reflect"),
+                    T.ToTensor(),
+                    T.Normalize(self.MEAN, self.STD),
+                ]
+            )
+        elif stage == "eval":
+            self.ds = load_dataset("cifar10", split="test")
+            self.transform = T.Compose(
+                [
+                    T.ToTensor(),
+                    T.Normalize(self.MEAN, self.STD),
+                ]
+            )
+        else:
+            raise ValueError(f"stage {stage!r} not supported")
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, i):
+        item = self.ds[i]
+        img = item["img"].convert("RGB")
+        return {
+            "pixel_values": self.transform(img),
+            "labels": item["label"],
+        }
