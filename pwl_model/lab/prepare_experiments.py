@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal, Optional, TypeVar
@@ -7,10 +6,9 @@ import torch
 from datasets import load_dataset
 from torch import nn
 from torchvision import transforms as T
-from transformers import AutoImageProcessor
+from transformers import PretrainedConfig, PreTrainedModel
 
-TemplateModel = TypeVar("TM")
-TemplateConfig = TypeVar("TC")
+from .prepare_data import CIFAR100TorchDataset
 
 
 @dataclass
@@ -42,26 +40,26 @@ def looks_like_checkpoint_dir(path: str) -> bool:
 
 def load_block_model(
     model_from: str | None,
-    model_for_image_classification: TemplateModel,
-    model_config: TemplateConfig,
-) -> TemplateModel | None:
+    model_for_image_classification: PreTrainedModel,
+    model_config: PretrainedConfig,
+) -> PreTrainedModel | None:
     if model_from is None:
         return None
-    elif not os.path.exists(model_from) or not os.path.isdir(model_from):
-        raise ValueError(f"Invalid model_from value: {model_from}. ")
-    elif looks_like_checkpoint_dir(model_from):
+
+    try:
         return model_for_image_classification.from_pretrained(model_from)
-    elif os.path.exists(os.path.join(model_from, "config.json")):
-        config = model_config.from_pretrained(model_from)
-        return model_for_image_classification(config)
-    else:
-        raise ValueError(f"Invalid model_from value: {model_from}.")
+    except:
+        try:
+            config = model_config.from_pretrained(Path(model_from) / "config.json")
+            return model_for_image_classification(config)
+        except:
+            raise ValueError(f"Invalid model_from value: {model_from}.")
 
 
 def prepare_experiment(
     model_type: Literal["resnet", "lenet5"],
-    teacher_from: str | None = None,
-    student_from: str | None = None,
+    teacher_from: str | PretrainedConfig | None = None,
+    student_from: str | PretrainedConfig | None = None,
     use_swapnet: bool = True,
     use_dataset: bool = True,
 ):
@@ -97,14 +95,28 @@ def prepare_experiment(
             DATASET_NAME = "uoft-cs/cifar10"
             PREPROCESS_BATCH_SIZE = 32
 
-            transform = T.Compose(
+            train_transform = T.Compose(
+                [
+                    T.RandomCrop(32, padding=4, padding_mode="reflect"),
+                    T.RandomHorizontalFlip(),
+                    T.ToTensor(),  # [0,1]
+                    T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
+                ]
+            )
+            eval_transform = T.Compose(
                 [
                     T.ToTensor(),  # [0,1]
                     T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
                 ]
             )
 
-            def preprocess(batch):
+            def train_preprocess(batch):
+                return _preprocess(batch, train_transform)
+
+            def eval_preprocess(batch):
+                return _preprocess(batch, eval_transform)
+
+            def _preprocess(batch, transform):
                 tensor_list = []
                 for arr in batch["img"]:
                     img = arr.convert("RGB")
@@ -115,13 +127,13 @@ def prepare_experiment(
 
             ds = load_dataset(DATASET_NAME)
             ds_train = ds["train"].map(
-                preprocess,
+                train_preprocess,
                 batched=True,
                 batch_size=PREPROCESS_BATCH_SIZE,
                 remove_columns=["img", "label"],
             )
             ds_val = ds["test"].map(
-                preprocess,
+                eval_preprocess,
                 batched=True,
                 batch_size=PREPROCESS_BATCH_SIZE,
                 # 'pixel_values' and 'labels' goes to input # 'pixel_values' and 'labels' goes to input
@@ -136,7 +148,6 @@ def prepare_experiment(
                 eval=ds_val,
             )
     elif model_type == "resnet":
-        from torchvision import transforms as T
 
         from pwl_model.core import SwapNet
         from pwl_model.models.resnet import (BlockResNetConfig,
@@ -165,49 +176,14 @@ def prepare_experiment(
 
         if use_dataset:
             DATASET_NAME = "cifar100"
-            PREPROCESS_BATCH_SIZE = 64
 
-            transform = T.Compose(
-                [
-                    T.ToTensor(),  # [0,1]
-                    T.Lambda(lambda t: t - 0.5),  # → roughly [–0.5, +0.5]
-                ]
-            )
-
-            def preprocess(batch):
-
-                tensor_list = []
-                for arr in batch["img"]:
-                    img = arr.convert("RGB")
-                    tensor_list.append(transform(img))
-                batch["pixel_values"] = torch.stack(tensor_list)
-                batch["labels"] = batch["fine_label"]
-                return batch
-
-            ds = load_dataset(DATASET_NAME)
-
-            ds_train = ds["train"].map(
-                preprocess,
-                batched=True,
-                batch_size=PREPROCESS_BATCH_SIZE,
-                remove_columns=["img", "fine_label", "coarse_label"],
-            )
-            ds_val = ds["test"].map(
-                preprocess,
-                batched=True,
-                batch_size=PREPROCESS_BATCH_SIZE,
-                remove_columns=["img", "fine_label", "coarse_label"],
-            )
-            e_set.dataset = ExperimentDataset(
-                name=DATASET_NAME,
-                train=ds_train,
-                eval=ds_val,
-            )
+            ds_train = CIFAR100TorchDataset("train")
+            ds_eval = CIFAR100TorchDataset("eval")
 
             e_set.dataset = ExperimentDataset(
                 name=DATASET_NAME,
                 train=ds_train,
-                eval=ds_val,
+                eval=ds_eval,
             )
 
     else:

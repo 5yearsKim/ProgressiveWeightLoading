@@ -11,9 +11,10 @@ from transformers import AutoModelForImageClassification
 ms_model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-18")
 
 def forward_fn(model, x):
-    pixel_value = torch.zeros([1, 3, 224, 224])
+    pixel_value = torch.zeros([1, 3, 32, 32])
 
     out = model(pixel_value)
+
 
     print(out.logits.shape)
 

@@ -5,11 +5,11 @@ from pathlib import Path
 import numpy as np
 import torch
 from datasets import load_dataset
+from pwl_experiments import prepare_experiment
 from safetensors.torch import load_model
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from pwl_experiments import prepare_experiment
 from pwl_model.core import FeatureDistiller, SwapNet
 from pwl_model.core.feature_distiller import FeatureDistiller
 

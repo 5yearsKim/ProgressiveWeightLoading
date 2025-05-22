@@ -3,6 +3,7 @@ import torch.nn as nn
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import ImageClassifierOutputWithNoAttention
 from transformers.models.resnet.modeling_resnet import (ResNetConfig,
+                                                        ResNetConvLayer,
                                                         ResNetEmbeddings,
                                                         ResNetStage)
 
@@ -12,13 +13,54 @@ from pwl_model.core.block_net import BlockModule, BlockNetMixin
 class BlockResNetConfig(ResNetConfig):
     model_type = "block_resnet"
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        embedder_kernel_size=7,
+        embedder_kernel_stride=2,
+        embedder_use_pooler=True,
+        **kwargs
+    ):
         super().__init__(**kwargs)
+        self.embedder_kernel_size = embedder_kernel_size
+        self.embedder_kernel_stride = embedder_kernel_stride
+        self.embedder_use_pooler = embedder_use_pooler
 
 
 class BlockResNetPreTrainedModel(PreTrainedModel):
     config_class = BlockResNetConfig
     base_model_prefix = "block_resnet"
+
+
+class ResNetEmbeddings(nn.Module):
+    """
+    ResNet Embeddings (stem) composed of a single aggressive convolution.
+    """
+
+    def __init__(self, config: ResNetConfig):
+        super().__init__()
+        self.embedder = ResNetConvLayer(
+            config.num_channels,
+            config.embedding_size,
+            kernel_size=config.embedder_kernel_size,
+            stride=config.embedder_kernel_stride,
+            activation=config.hidden_act,
+        )
+        self.pooler = (
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            if config.embedder_use_pooler
+            else nn.Identity()
+        )
+        self.num_channels = config.num_channels
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embedding = self.embedder(pixel_values)
+        embedding = self.pooler(embedding)
+        return embedding
 
 
 class BlockResNetModel(BlockNetMixin, BlockResNetPreTrainedModel):

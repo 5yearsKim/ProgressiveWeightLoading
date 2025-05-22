@@ -3,10 +3,11 @@ import argparse
 import mlflow
 import numpy as np
 import torch
-from transformers import Trainer, TrainingArguments
+import torch.optim as optim
+from transformers import Trainer, TrainingArguments, SchedulerType
 from transformers.integrations import MLflowCallback
 
-from pwl_experiments import prepare_experiment
+from pwl_model.lab import prepare_experiment
 
 
 def parse_args():
@@ -22,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=40,
+        default=100,
         help="Number of training epochs",
     )
     parser.add_argument(
@@ -55,8 +56,8 @@ def parse_args():
     parser.add_argument(
         "--pretrained_path",
         type=str,
-        default=None,
-        help="Directory to save model checkpoints",
+        required=True,
+        help="Directory to save model checkpoints.",
     )
     parser.add_argument(
         "--save_path",
@@ -87,10 +88,7 @@ def main():
     mlflow.log_param("batch_size", args.batch_size)
 
     # prepare configuration and experiment
-    if args.pretrained_path is None:
-        raise NotImplementedError("not implemented yet")
-    else:
-        teacher_from = args.pretrained_path
+    teacher_from = args.pretrained_path
 
     e_set = prepare_experiment(
         args.model_type,
@@ -103,6 +101,15 @@ def main():
     ds_train = e_set.dataset.train
     ds_eval = e_set.dataset.eval
     collate_fn = e_set.dataset.collate_fn
+
+    # optimizer = optim.SGD(
+    #     model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=5e-4
+    # )
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=5e-4)
+
+    epoch_steps = 50000 // args.batch_size
+
+    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_steps * args.epochs, eta_min=args.learning_rate/20) #learning rate decay
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))
@@ -118,6 +125,8 @@ def main():
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
+        warmup_steps=500,
+        # lr_scheduler_type=SchedulerType.CONSTANT_WITH_WARMUP,
         num_train_epochs=args.epochs,
         save_strategy="epoch",
         logging_strategy="epoch",
@@ -129,6 +138,7 @@ def main():
         greater_is_better=True,
         save_total_limit=1,
         remove_unused_columns=False,
+        dataloader_num_workers=8,
     )
 
     print("Training start...")
@@ -142,6 +152,7 @@ def main():
         data_collator=collate_fn,
         compute_metrics=compute_metrics,
         callbacks=[MLflowCallback()],
+        optimizers=(optimizer, train_scheduler),
     )
 
     if args.eval_only:

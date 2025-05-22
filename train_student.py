@@ -4,12 +4,12 @@ import os
 import mlflow
 import numpy as np
 import torch
+from pwl_experiments import prepare_experiment
 from transformers import (Trainer, TrainerCallback, TrainerControl,
                           TrainerState, TrainingArguments)
 from transformers.integrations import MLflowCallback
 from transformers.trainer_utils import EvalPrediction
 
-from pwl_experiments import prepare_experiment
 from pwl_model.core.feature_distiller import DistillerOutput, FeatureDistiller
 from pwl_model.utils.training_utils import AverageMeter
 
@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=3e-4,
+        default=2e-4,
         help="Initial learning rate",
     )
     parser.add_argument(
