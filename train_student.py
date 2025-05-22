@@ -61,7 +61,7 @@ def parse_args():
     parser.add_argument(
         "--bs",
         type=int,
-        default=32,
+        default=128,
         help="Batch size per device",
     )
     parser.add_argument(
