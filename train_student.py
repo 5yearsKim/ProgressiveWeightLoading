@@ -41,19 +41,19 @@ def parse_args():
         help="Where to save distilled checkpoints",
     )
     parser.add_argument(
-        "--num_train_epochs",
+        "--epochs",
         type=int,
-        default=30,
+        default=160,
         help="Number of training epochs",
     )
     parser.add_argument(
-        "--learning_rate",
+        "--lr",
         type=float,
         default=2e-4,
         help="Initial learning rate",
     )
     parser.add_argument(
-        "--batch_size",
+        "--bs",
         type=int,
         default=32,
         help="Batch size per device",
@@ -183,10 +183,10 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=args.output_dir,
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        num_train_epochs=args.num_train_epochs,
-        learning_rate=args.learning_rate,
+        per_device_train_batch_size=args.bs,
+        per_device_eval_batch_size=args.bs,
+        num_train_epochs=args.epochs,
+        learning_rate=args.lr,
         save_safetensors=True,
         report_to=["mlflow"],
         logging_dir="./runs",

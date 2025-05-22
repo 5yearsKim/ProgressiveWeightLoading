@@ -15,7 +15,7 @@ def save_config():
     if MODEL_TYPE == "resnet-teacher":
         from pwl_model.models.resnet import BlockResNetConfig
         config = BlockResNetConfig.from_pretrained("microsoft/resnet-18")
-        config.embedder_kernel_size = 5
+        config.embedder_kernel_size = 3 
         config.embedder_kernel_stride = 1
         config.embedder_use_pooler = False
         config.downsample_in_first_stage = False

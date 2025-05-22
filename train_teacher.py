@@ -23,17 +23,17 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=100,
+        default=200,
         help="Number of training epochs",
     )
     parser.add_argument(
-        "--learning_rate",
+        "--lr",
         type=float,
-        default=2e-3,
+        default=1e-1,
         help="Learning rate for optimizer",
     )
     parser.add_argument(
-        "--batch_size",
+        "--bs",
         type=int,
         default=128,
         help="Batch size per device",
@@ -84,8 +84,8 @@ def main():
     mlflow.log_param("device", str(device))
     mlflow.log_param("model_type", args.model_type)
     mlflow.log_param("epochs", args.epochs)
-    mlflow.log_param("learning_rate", args.learning_rate)
-    mlflow.log_param("batch_size", args.batch_size)
+    mlflow.log_param("learning_rate", args.lr)
+    mlflow.log_param("batch_size", args.bs)
 
     # prepare configuration and experiment
     teacher_from = args.pretrained_path
@@ -102,14 +102,14 @@ def main():
     ds_eval = e_set.dataset.eval
     collate_fn = e_set.dataset.collate_fn
 
-    # optimizer = optim.SGD(
-    #     model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=5e-4
-    # )
-    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=5e-4)
+    optimizer = optim.SGD(
+        model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4
+    )
+    # optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=5e-4)
 
-    epoch_steps = 50000 // args.batch_size
+    epoch_steps = 50000 // args.bs
 
-    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_steps * args.epochs, eta_min=args.learning_rate/20) #learning rate decay
+    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr /20, 1e-5)) #learning rate decay
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))
@@ -122,9 +122,9 @@ def main():
     # Training arguments
     training_args = TrainingArguments(
         output_dir=args.save_path,
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
+        per_device_train_batch_size=args.bs,
+        per_device_eval_batch_size=args.bs,
+        learning_rate=args.lr,
         warmup_steps=500,
         # lr_scheduler_type=SchedulerType.CONSTANT_WITH_WARMUP,
         num_train_epochs=args.epochs,
