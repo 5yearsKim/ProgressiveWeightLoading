@@ -4,13 +4,14 @@ import os
 import mlflow
 import numpy as np
 import torch
-from pwl_experiments import prepare_experiment
+import torch.optim as optim
 from transformers import (Trainer, TrainerCallback, TrainerControl,
                           TrainerState, TrainingArguments)
 from transformers.integrations import MLflowCallback
 from transformers.trainer_utils import EvalPrediction
 
 from pwl_model.core.feature_distiller import DistillerOutput, FeatureDistiller
+from pwl_model.lab import ExperimentComposer
 from pwl_model.utils.training_utils import AverageMeter
 
 
@@ -24,6 +25,11 @@ def parse_args():
         type=str,
         choices=["resnet", "lenet5"],
         help="Model type",
+    )
+    parser.add_argument(
+        "--data_type",
+        choices=["cifar10", "cifar100"],
+        help="dataset to use for training",
     )
     parser.add_argument(
         "--teacher_path",
@@ -43,13 +49,13 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=160,
+        default=200,
         help="Number of training epochs",
     )
     parser.add_argument(
         "--lr",
         type=float,
-        default=2e-4,
+        default=1e-1,
         help="Initial learning rate",
     )
     parser.add_argument(
@@ -63,6 +69,11 @@ def parse_args():
         type=bool,
         default=True,
         help="Batch size per device",
+    )
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        help="MLflow experiment name",
     )
     parser.add_argument(
         "--is_sample",
@@ -131,6 +142,7 @@ class MeterCallback(TrainerCallback):
             logs[f"{name}"] = format(meter.avg, ".3g")
             meter.reset()
 
+        print("----------------------")
         print(logs)
 
         # Tell HF to write these logs now
@@ -142,26 +154,41 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.model_type == "resnet":
-        mlflow.set_experiment("resnet18-tiny-imagenet-distill")
-        mlflow.log_param("device", str(device))
+    mlflow.set_experiment(args.experiment_name)
+    mlflow.log_param("device", str(device))
+    mlflow.log_param("model_type", args.model_type)
+    mlflow.log_param("epochs", args.epochs)
+    mlflow.log_param("learning_rate", args.lr)
+    mlflow.log_param("batch_size", args.bs)
 
-    elif args.model_type == "lenet5":
-        mlflow.set_experiment("lenet5-cifar10-distill")
-        mlflow.log_param("device", str(device))
-    else:
-        raise ValueError(f"{args.model_type} not defined")
+    e_composer = ExperimentComposer()
 
-    e_set = prepare_experiment(
+    e_model = e_composer.prepare_model(
         args.model_type,
         teacher_from=args.teacher_path,
         student_from=args.student_path,
     )
 
-    swapnet = e_set.swapnet
-    ds_train = e_set.dataset.train
-    ds_eval = e_set.dataset.eval
-    collate_fn = e_set.dataset.collate_fn
+    e_dset = e_composer.prepare_data(args.data_type)
+
+    swapnet = e_model.swapnet
+
+    ds_train = e_dset.train
+    ds_eval = e_dset.eval
+    collate_fn = e_dset.collate_fn
+
+    optimizer = optim.SGD(
+        (p for p in swapnet.parameters() if p.requires_grad),
+        lr=args.lr,
+        momentum=0.9,
+        weight_decay=5e-4,
+    )
+
+    epoch_steps = 50000 // args.bs
+
+    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr / 20, 1e-5)
+    )
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))
@@ -207,6 +234,7 @@ def main():
         data_collator=collate_fn,
         compute_metrics=compute_metrics,
         callbacks=[MLflowCallback(), MeterCallback()],
+        optimizers=(optimizer, train_scheduler),
     )
 
     trainer.train()

@@ -21,6 +21,10 @@ class SwapNet(nn.Module):
         assert len(self.student.blocks) == len(
             self.teacher.blocks
         ), "Teacher and student must have the same number of blocks"
+
+        for p in self.teacher.parameters():
+            p.requires_grad = False
+
         self.num_blocks = len(self.student.blocks)
         self.num_feat = self.num_blocks - 1
 
