@@ -11,4 +11,4 @@ __pycache__
 ckpts/
 data/
 mlruns/
-hack/
+cmd/
