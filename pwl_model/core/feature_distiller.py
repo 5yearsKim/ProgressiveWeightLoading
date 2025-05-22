@@ -36,9 +36,9 @@ class FeatureDistiller(nn.Module):
         swapnet: SwapNet,
         temp: float = 2.0,
         alpha: float = 0.4,
-        w_sync: float = 2,
-        w_recon: float = 2,
-        w_cross: float = 0.5,
+        w_sync: float = 1,
+        w_recon: float = 1,
+        w_cross: float = 1,
     ):
         """
         temp: temperature for KD
@@ -111,17 +111,21 @@ class FeatureDistiller(nn.Module):
             loss_feat_recon / max(self.swapnet.num_feat, 1)
         )
 
-        while True:
-            from_teachers = [
-                random.choice([True, False]) for _ in range(self.swapnet.num_blocks)
-            ]
-            # ensure at least one True and one False
-            if any(from_teachers) and not all(from_teachers):
-                break
+        def get_random_bool(n: int) -> list[bool]:
+            start = random.choice([True, False])
+            pivot = random.randint(1, n - 1)
+            rand_bool = [start] * pivot + [not start] * (n - pivot)
+            return rand_bool
+
+        from_teachers = get_random_bool(self.swapnet.num_blocks)
 
         cross_logits = self.swapnet(pixel_values, from_teachers)
 
-        loss_cross = self.w_cross * self.ce(cross_logits, labels)
+        p_cross = F.log_softmax(cross_logits / T, dim=-1)
+        p_teacher = F.softmax(logits_t.detach() / T, dim=-1)
+        loss_cross = (
+            self.w_cross * F.kl_div(p_cross, p_teacher, reduction="batchmean") * (T * T)
+        )
 
         # --- Combine all losses ---
         total_loss = (

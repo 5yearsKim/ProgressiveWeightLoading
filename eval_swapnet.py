@@ -8,7 +8,7 @@ from safetensors.torch import load_model
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from pwl_model.core import FeatureDistiller, SwapNet, FeatureDistiller
+from pwl_model.core import FeatureDistiller, SwapNet
 from pwl_model.lab import ExperimentComposer
 
 
