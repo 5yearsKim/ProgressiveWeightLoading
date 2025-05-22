@@ -33,13 +33,9 @@ class BlockResNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "block_resnet"
 
 
-class ResNetEmbeddings(nn.Module):
-    """
-    ResNet Embeddings (stem) composed of a single aggressive convolution.
-    """
-
-    def __init__(self, config: ResNetConfig):
-        super().__init__()
+class BlockResNetEmbeddings(ResNetEmbeddings):
+    def __init__(self, config: BlockResNetConfig):
+        super().__init__(config)
         self.embedder = ResNetConvLayer(
             config.num_channels,
             config.embedding_size,
@@ -52,17 +48,6 @@ class ResNetEmbeddings(nn.Module):
             if config.embedder_use_pooler
             else nn.Identity()
         )
-        self.num_channels = config.num_channels
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        embedding = self.embedder(pixel_values)
-        embedding = self.pooler(embedding)
-        return embedding
 
 
 class BlockResNetModel(BlockNetMixin, BlockResNetPreTrainedModel):
@@ -76,7 +61,7 @@ class BlockResNetModel(BlockNetMixin, BlockResNetPreTrainedModel):
         config = self.config
         blocks = [
             BlockModule(
-                ResNetEmbeddings(config),
+                BlockResNetEmbeddings(config),
                 ResNetStage(
                     config,
                     config.embedding_size,
