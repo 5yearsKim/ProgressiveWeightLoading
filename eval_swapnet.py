@@ -4,14 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from datasets import load_dataset
-from pwl_experiments import prepare_experiment
 from safetensors.torch import load_model
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from pwl_model.core import FeatureDistiller, SwapNet
-from pwl_model.core.feature_distiller import FeatureDistiller
+from pwl_model.core import FeatureDistiller, SwapNet, FeatureDistiller
+from pwl_model.lab import ExperimentComposer
 
 
 def parse_args():
@@ -26,6 +24,12 @@ def parse_args():
         help="Model type",
     )
     parser.add_argument(
+        "--data_type",
+        type=str,
+        choices=["cifar10", "cifar100"],
+        help="Data Type",
+    )
+    parser.add_argument(
         "--model_path",
         type=str,
         help="Path or model identifier of the model",
@@ -33,10 +37,9 @@ def parse_args():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=256,
+        default=128,
         help="Batch size per device",
     )
-    parser.add_argu
     return parser.parse_args()
 
 
@@ -44,28 +47,32 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.model_type == "lenet5":
-        from torchvision import transforms as T
+    e_composer = ExperimentComposer()
 
-        model_path = Path(args.model_path)
+    model_path = Path(args.model_path)
 
-        e_set = prepare_experiment(
-            model_type="lenet5",
-            teacher_from=model_path / "teacher_config",
-            student_from=model_path / "student_config",
-        )
+    e_model = e_composer.prepare_model(
+        args.model_type,
+        teacher_from=model_path / "teacher_config",
+        student_from=model_path / "student_config",
+        use_swapnet=True,
+    )
 
-        swapnet = e_set.swapnet.to(device)
-        eval_ds = e_set.dataset.eval
+    swapnet = e_model.swapnet
 
-        distiller = FeatureDistiller(swapnet=swapnet)
-        load_model(
-            distiller,
-            model_path / "model.safetensors",
-        )
+    distiller = FeatureDistiller(swapnet=swapnet)
+    load_model(distiller, model_path / "model.safetensors")
 
-    else:
-        raise ValueError(f"{args.model_type} not defined")
+    swapnet.to(device)
+    swapnet.eval()
+
+    e_dset = e_composer.prepare_data(
+        args.data_type,
+        use_train=False,
+        use_eval=True,
+    )
+
+    eval_ds = e_dset.eval
 
     def collate_fn(batch):
         pixels = torch.stack(
@@ -84,9 +91,6 @@ def main():
         num_workers=4,
         pin_memory=True,
     )
-
-    swapnet.to(device)
-    swapnet.eval()
 
     from_teachers = [True] * swapnet.num_blocks
 
