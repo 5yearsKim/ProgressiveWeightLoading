@@ -89,6 +89,29 @@ class SwapNet(nn.Module):
 
         return logits
 
+    def cross_forward(
+        self, feature: torch.Tensor, idx: int, from_teacher: bool
+    ) -> torch.Tensor:
+        """
+        Forward pass with cross feature.
+        """
+        assert (
+            idx < self.num_feat
+        ), f"idx {idx} should be less than num_blocks {self.num_feat} - 1"
+
+        converter = self.encoders[idx] if from_teacher else self.decoders[idx]
+        blocks = (
+            self.student.blocks[idx + 1 :]
+            if from_teacher
+            else self.teacher.blocks[idx + 1 :]
+        )
+
+        x = feature
+        x = converter(x)
+        for block in blocks:
+            x = block(x)
+        return x
+
     def infer_teacher(
         self, x, return_features: bool = False
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
