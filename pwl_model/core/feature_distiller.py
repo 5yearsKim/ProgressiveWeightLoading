@@ -114,7 +114,7 @@ class FeatureDistiller(nn.Module):
         loss_cross = 0.0
 
         for i, feat_t in enumerate(features_t):
-            cross_logits = self.swapnet.cross_forward(feat_t, i)
+            cross_logits = self.swapnet.cross_forward(feat_t, i, from_teacher=True)
 
             hard_cross_loss = self.alpha * self.ce(cross_logits, labels)
             soft_cross_loss = (

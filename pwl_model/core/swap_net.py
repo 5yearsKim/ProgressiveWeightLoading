@@ -105,12 +105,18 @@ class SwapNet(nn.Module):
             if from_teacher
             else self.teacher.blocks[idx + 1 :]
         )
+        classifier = (
+            self.student.classifier if from_teacher else self.teacher.classifier
+        )
 
         x = feature
         x = converter(x)
         for block in blocks:
             x = block(x)
-        return x
+
+        logits = classifier(x)
+
+        return logits
 
     def infer_teacher(
         self, x, return_features: bool = False
