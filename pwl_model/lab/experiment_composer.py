@@ -52,6 +52,9 @@ class ExperimentComposer:
 
             if use_swapnet:
                 INPUT_SHAPE = (3, 32, 32)
+
+                assert teacher is not None, "Teacher model is not loaded."
+                assert student is not None, "Student model is not loaded."
                 swapnet = SwapNet(
                     teacher=teacher,
                     student=student,

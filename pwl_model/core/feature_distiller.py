@@ -36,8 +36,8 @@ class FeatureDistiller(nn.Module):
         swapnet: SwapNet,
         temp: float = 2.0,
         alpha: float = 0.4,
-        w_sync: float = 0.2,
-        w_recon: float = 0.2,
+        w_sync: float = 1,
+        w_recon: float = 1,
         w_cross: float = 0.5,
     ):
         """

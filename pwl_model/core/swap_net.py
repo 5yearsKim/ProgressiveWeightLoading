@@ -109,8 +109,7 @@ class SwapNet(nn.Module):
             self.student.classifier if from_teacher else self.teacher.classifier
         )
 
-        x = feature
-        x = converter(x)
+        x = converter(feature)
         for block in blocks:
             x = block(x)
 

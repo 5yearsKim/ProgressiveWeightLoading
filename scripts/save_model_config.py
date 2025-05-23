@@ -66,6 +66,17 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         config.hidden_sizes = [32, 64, 128, 256]
         config.save_pretrained(save_path)
 
+    if model_type == "lenet5-teacher":
+        from pwl_model.models.lenet5 import BlockLeNet5Config
+
+        config = BlockLeNet5Config(
+            cnn_channels=[6, 16],
+            fc_sizes=[400, 120, 84],
+            num_labels=num_labels,
+        )
+
+        config.save_pretrained(save_path)
+
     elif model_type.startswith("lenet5"):
         from pwl_model.models.lenet5 import BlockLeNet5Config
         # lenet5 config doesn't need pretrained, just instantiate
