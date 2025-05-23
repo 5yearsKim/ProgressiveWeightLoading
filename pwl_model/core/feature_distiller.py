@@ -1,5 +1,6 @@
 import random
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -39,6 +40,7 @@ class FeatureDistiller(nn.Module):
         w_sync: float = 1,
         w_recon: float = 1,
         w_cross: float = 0.5,
+        cross_mode: Literal["random", "all"] = "random",
     ):
         """
         temp: temperature for KD
@@ -61,6 +63,9 @@ class FeatureDistiller(nn.Module):
         self.w_sync = w_sync
         self.w_recon = w_recon
         self.w_cross = w_cross
+
+        # etc
+        self.cross_mode = cross_mode
 
     def forward(
         self, pixel_values: torch.Tensor, labels: torch.LongTensor
@@ -111,40 +116,44 @@ class FeatureDistiller(nn.Module):
             loss_feat_recon / max(self.swapnet.num_feat, 1)
         )
 
-        loss_cross = 0.0
+        if self.cross_mode == "all":
+            loss_cross = 0.0
 
-        for i, feat_t in enumerate(features_t):
-            cross_logits = self.swapnet.cross_forward(feat_t, i, from_teacher=True)
+            for i, feat_t in enumerate(features_t):
+                cross_logits = self.swapnet.cross_forward(feat_t, i, from_teacher=True)
 
-            hard_cross_loss = self.alpha * self.ce(cross_logits, labels)
-            soft_cross_loss = (
-                (1 - self.alpha)
-                * F.kl_div(
-                    F.log_softmax(cross_logits / T, dim=-1),
-                    F.softmax(logits_t.detach() / T, dim=-1),
-                    reduction="batchmean",
+                hard_cross_loss = self.alpha * self.ce(cross_logits, labels)
+                soft_cross_loss = (
+                    (1 - self.alpha)
+                    * F.kl_div(
+                        F.log_softmax(cross_logits / T, dim=-1),
+                        F.softmax(logits_t.detach() / T, dim=-1),
+                        reduction="batchmean",
+                    )
+                    * (T * T)
                 )
+                loss_cross += hard_cross_loss + soft_cross_loss
+
+            loss_cross = self.w_cross * (loss_cross / max(self.swapnet.num_feat, 1))
+        elif self.cross_mode == "random":
+
+            def get_random_bool(n: int) -> list[bool]:
+                start = random.choice([True, False])
+                pivot = random.randint(1, n - 1)
+                rand_bool = [start] * pivot + [not start] * (n - pivot)
+                return rand_bool
+
+            from_teachers = get_random_bool(self.swapnet.num_blocks)
+
+            cross_logits = self.swapnet(pixel_values, from_teachers)
+
+            p_cross = F.log_softmax(cross_logits / T, dim=-1)
+            p_teacher = F.softmax(logits_t.detach() / T, dim=-1)
+            loss_cross = (
+                self.w_cross
+                * F.kl_div(p_cross, p_teacher, reduction="batchmean")
                 * (T * T)
             )
-            loss_cross += hard_cross_loss + soft_cross_loss
-
-        loss_cross = self.w_cross * (loss_cross / max(self.swapnet.num_feat, 1))
-
-        # def get_random_bool(n: int) -> list[bool]:
-        #     start = random.choice([True, False])
-        #     pivot = random.randint(1, n - 1)
-        #     rand_bool = [start] * pivot + [not start] * (n - pivot)
-        #     return rand_bool
-
-        # from_teachers = get_random_bool(self.swapnet.num_blocks)
-
-        # cross_logits = self.swapnet(pixel_values, from_teachers)
-
-        # p_cross = F.log_softmax(cross_logits / T, dim=-1)
-        # p_teacher = F.softmax(logits_t.detach() / T, dim=-1)
-        # loss_cross = (
-        #     self.w_cross * F.kl_div(p_cross, p_teacher, reduction="batchmean") * (T * T)
-        # )
 
         # --- Combine all losses ---
         total_loss = (

@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "--model_type",
         type=str,
-        choices=["resnet", "lenet5"],
+        choices=["resnet", "lenet5", "vgg"],
         help="Model type",
     )
     parser.add_argument(
@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument(
         "--lr",
         type=float,
-        default=1e-1,
+        default=5e-2,
         help="Initial learning rate",
     )
     parser.add_argument(

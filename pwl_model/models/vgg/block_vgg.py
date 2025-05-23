@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from transformers import PreTrainedModel, PretrainedConfig
+from transformers import PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import ImageClassifierOutputWithNoAttention
+
 from pwl_model.core.block_net import BlockModule, BlockNetMixin
 
 
@@ -47,11 +48,15 @@ class BlockVGGModel(BlockNetMixin, BlockVGGPreTrainedModel):
             convs = []
             # sequence of conv -> relu
             for _ in range(num_convs):
-                convs.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
+                convs.append(
+                    nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+                )
                 convs.append(nn.ReLU(inplace=True))
                 in_channels = out_channels
             # pooling layer
-            convs.append(nn.MaxPool2d(kernel_size=cfg.pool_kernel, stride=cfg.pool_stride))
+            convs.append(
+                nn.MaxPool2d(kernel_size=cfg.pool_kernel, stride=cfg.pool_stride)
+            )
 
             block_seq = nn.Sequential(*convs)
             blocks.append(BlockModule(block_seq))
@@ -69,9 +74,11 @@ class BlockVGGForImageClassification(BlockVGGPreTrainedModel):
         self.classifier = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels)
-            if config.num_labels > 0
-            else nn.Identity(),
+            (
+                nn.Linear(config.hidden_sizes[-1], config.num_labels)
+                if config.num_labels > 0
+                else nn.Identity()
+            ),
         )
 
         self.post_init()

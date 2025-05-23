@@ -5,10 +5,11 @@ import torch
 from torch import nn
 from transformers import PretrainedConfig
 
+from pwl_model.core import SwapNet
+
 from .custom_data import CIFAR10TorchDataset, CIFAR100TorchDataset
 from .utils import load_block_model
 
-from pwl_model.core import SwapNet
 
 @dataclass
 class ExperimentDataset:
@@ -90,15 +91,15 @@ class ExperimentComposer:
 
         elif model_type == "vgg":
 
-            from pwl_model.models.vgg import (
-                BlockVGGConfig, BlockVGGForImageClassification)
+            from pwl_model.models.vgg import (BlockVGGConfig,
+                                              BlockVGGForImageClassification)
 
             # Create the teacher and student models
             teacher = load_block_model(
-                teacher_from, BlockVGGForImageClassification,BlockVGGConfig 
+                teacher_from, BlockVGGForImageClassification, BlockVGGConfig
             )
             student = load_block_model(
-                student_from, BlockVGGForImageClassification,BlockVGGConfig 
+                student_from, BlockVGGForImageClassification, BlockVGGConfig
             )
             e_set.teacher = teacher
             e_set.student = student
