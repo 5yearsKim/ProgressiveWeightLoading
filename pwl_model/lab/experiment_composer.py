@@ -8,6 +8,7 @@ from transformers import PretrainedConfig
 from .custom_data import CIFAR10TorchDataset, CIFAR100TorchDataset
 from .utils import load_block_model
 
+from pwl_model.core import SwapNet
 
 @dataclass
 class ExperimentDataset:
@@ -36,7 +37,6 @@ class ExperimentComposer:
 
         if model_type == "lenet5":
 
-            from pwl_model.core import SwapNet
             from pwl_model.models.lenet5 import (
                 BlockLeNet5Config, BlockLeNet5ForImageClassification)
 
@@ -64,7 +64,6 @@ class ExperimentComposer:
 
         elif model_type == "resnet":
 
-            from pwl_model.core import SwapNet
             from pwl_model.models.resnet import (
                 BlockResNetConfig, BlockResNetForImageClassification)
 
@@ -74,6 +73,32 @@ class ExperimentComposer:
             )
             student = load_block_model(
                 student_from, BlockResNetForImageClassification, BlockResNetConfig
+            )
+            e_set.teacher = teacher
+            e_set.student = student
+
+            if use_swapnet:
+                INPUT_SHAPE = (3, 32, 32)
+                assert teacher is not None, "Teacher model is not loaded."
+                assert student is not None, "Student model is not loaded."
+                swapnet = SwapNet(
+                    teacher=teacher,
+                    student=student,
+                    input_shape=INPUT_SHAPE,
+                )
+                e_set.swapnet = swapnet
+
+        elif model_type == "vgg":
+
+            from pwl_model.models.vgg import (
+                BlockVGGConfig, BlockVGGForImageClassification)
+
+            # Create the teacher and student models
+            teacher = load_block_model(
+                teacher_from, BlockVGGForImageClassification,BlockVGGConfig 
+            )
+            student = load_block_model(
+                student_from, BlockVGGForImageClassification,BlockVGGConfig 
             )
             e_set.teacher = teacher
             e_set.student = student

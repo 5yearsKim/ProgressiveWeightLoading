@@ -10,7 +10,7 @@ def parse_args():
         "-m", "--model-type",
         type=str,
         required=True,
-        choices=["resnet-teacher", "resnet-student", "lenet5-teacher", "lenet5-student"],
+        choices=["resnet-teacher", "resnet-student", "lenet5-teacher", "lenet5-student", "vgg-teacher", "vgg-student"],
         help="Model type: teacher/student variant of ResNet or LeNet5",
     )
     parser.add_argument(
@@ -77,10 +77,28 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
 
         config.save_pretrained(save_path)
 
-    elif model_type.startswith("lenet5"):
+    elif model_type == "lenet5-stdent":
         from pwl_model.models.lenet5 import BlockLeNet5Config
         # lenet5 config doesn't need pretrained, just instantiate
         config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84], num_labels=num_labels)
+        config.save_pretrained(save_path)
+    elif model_type == "vgg-teacher":
+        from pwl_model.models.vgg import BlockVGGConfig
+
+        config = BlockVGGConfig(
+            hidden_sizes=[64, 128, 256, 512],
+            depths=[2, 2, 3, 3],
+            num_labels=num_labels,
+        )
+        config.save_pretrained(save_path)
+    elif model_type == "vgg-student":
+        from pwl_model.models.vgg import BlockVGGConfig
+
+        config = BlockVGGConfig(
+            hidden_sizes=[16, 32, 64, 128],
+            depths=[2, 2, 3, 3],
+            num_labels=num_labels,
+        )
         config.save_pretrained(save_path)
 
     else:
