@@ -51,6 +51,8 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         config.embedder_use_pooler = False
         config.downsample_in_first_stage = False
         config.num_labels = num_labels
+        config.hidden_sizes = [32, 64, 128, 256]
+        config.depths = [2, 2, 2, 2]
         config.save_pretrained(save_path)
 
     elif model_type == "resnet-student":
@@ -64,9 +66,10 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         config.downsample_in_first_stage = False
         config.num_labels = num_labels
         config.hidden_sizes = [32, 64, 128, 256]
+        config.depths = [1, 1, 1, 1]
         config.save_pretrained(save_path)
 
-    if model_type == "lenet5-teacher":
+    elif model_type == "lenet5-teacher":
         from pwl_model.models.lenet5 import BlockLeNet5Config
 
         config = BlockLeNet5Config(

@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "--model_type",
         type=str,
-        choices=["resnet", "lenet5"],
+        choices=["resnet", "lenet5", "vgg"],
         help="Model type",
     )
     parser.add_argument(
