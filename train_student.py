@@ -178,8 +178,20 @@ def main():
     collate_fn = e_dset.collate_fn
 
     optimizer = optim.SGD(
-        (p for p in swapnet.parameters() if p.requires_grad),
-        lr=args.lr,
+        [
+            {"params": swapnet.encoders.parameters(), "lr": args.lr * 0.1},
+            {"params": swapnet.decoders.parameters(), "lr": args.lr * 0.1},
+            {
+                "params": (
+                    p
+                    for name, p in swapnet.named_parameters()
+                    if p.requires_grad
+                    and not name.startswith("encoders")
+                    and not name.startswith("decoders")
+                ),
+                "lr": args.lr,
+            },
+        ],
         momentum=0.9,
         weight_decay=5e-4,
     )

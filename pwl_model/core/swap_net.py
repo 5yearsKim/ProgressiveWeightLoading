@@ -52,8 +52,12 @@ class SwapNet(nn.Module):
         self.encoders = nn.ModuleList([])
         self.decoders = nn.ModuleList([])
 
-        for feat_s, feat_t in zip(self._feat_s, self._feat_t):
+        for i, (feat_s, feat_t) in enumerate(zip(self._feat_s, self._feat_t)):
             chan_t, chan_s = feat_t.shape[1], feat_s.shape[1]
+
+            print(
+                f"Block {i}: teacher {chan_t} -> student {chan_s} ({feat_t.shape} -> {feat_s.shape})"
+            )
 
             if chan_t == chan_s:
                 self.encoders.append(nn.Identity())
