@@ -16,10 +16,11 @@ class SwapNet(nn.Module):
 
         super().__init__()
 
-        self.channel_last = channel_last
 
         self.teacher = teacher
         self.student = student
+
+        self.channel_last = channel_last
 
         assert len(self.student.blocks) == len(
             self.teacher.blocks
@@ -70,8 +71,8 @@ class SwapNet(nn.Module):
                 self.encoders.append(nn.Identity())
                 self.decoders.append(nn.Identity())
             elif chan_t > chan_s:
-                self.encoders.append(FeatureConverter(chan_t, chan_s))
-                self.decoders.append(FeatureConverter(chan_s, chan_t))
+                self.encoders.append(FeatureConverter(chan_t, chan_s, channel_last=channel_last))
+                self.decoders.append(FeatureConverter(chan_s, chan_t, channel_last=channel_last))
             else:
                 raise ValueError(f"chan_s {chan_s} should be less than chan_t {chan_t}")
 
