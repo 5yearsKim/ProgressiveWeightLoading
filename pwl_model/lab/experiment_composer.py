@@ -48,20 +48,6 @@ class ExperimentComposer:
             student = load_block_model(
                 student_from, BlockLeNet5ForImageClassification, BlockLeNet5Config
             )
-            e_set.teacher = teacher
-            e_set.student = student
-
-            if use_swapnet:
-                INPUT_SHAPE = (3, 32, 32)
-
-                assert teacher is not None, "Teacher model is not loaded."
-                assert student is not None, "Student model is not loaded."
-                swapnet = SwapNet(
-                    teacher=teacher,
-                    student=student,
-                    input_shape=INPUT_SHAPE,
-                )
-                e_set.swapnet = swapnet
 
         elif model_type == "resnet":
 
@@ -75,19 +61,6 @@ class ExperimentComposer:
             student = load_block_model(
                 student_from, BlockResNetForImageClassification, BlockResNetConfig
             )
-            e_set.teacher = teacher
-            e_set.student = student
-
-            if use_swapnet:
-                INPUT_SHAPE = (3, 32, 32)
-                assert teacher is not None, "Teacher model is not loaded."
-                assert student is not None, "Student model is not loaded."
-                swapnet = SwapNet(
-                    teacher=teacher,
-                    student=student,
-                    input_shape=INPUT_SHAPE,
-                )
-                e_set.swapnet = swapnet
 
         elif model_type == "vgg":
 
@@ -101,22 +74,46 @@ class ExperimentComposer:
             student = load_block_model(
                 student_from, BlockVGGForImageClassification, BlockVGGConfig
             )
-            e_set.teacher = teacher
-            e_set.student = student
+        elif model_type == "vit":
+            from pwl_model.models.vit import (BlockViTConfig,
+                                              BlockViTForImageClassification)
 
-            if use_swapnet:
-                INPUT_SHAPE = (3, 32, 32)
-                assert teacher is not None, "Teacher model is not loaded."
-                assert student is not None, "Student model is not loaded."
-                swapnet = SwapNet(
-                    teacher=teacher,
-                    student=student,
-                    input_shape=INPUT_SHAPE,
-                )
-                e_set.swapnet = swapnet
+            # Create the teacher and student models
+            teacher = load_block_model(
+                teacher_from, BlockViTForImageClassification, BlockViTConfig
+            )
+            student = load_block_model(
+                student_from, BlockViTForImageClassification, BlockViTConfig
+            )
+        elif model_type == "vit":
+            from pwl_model.models.vit import (BlockViTConfig,
+                                              BlockViTForImageClassification)
+
+            # Create the teacher and student models
+            teacher = load_block_model(
+                teacher_from, BlockViTForImageClassification, BlockViTConfig
+            )
+            student = load_block_model(
+                student_from, BlockViTForImageClassification, BlockViTConfig
+            )
 
         else:
             raise ValueError(f"{model_type} not defined")
+
+        e_set.teacher = teacher
+        e_set.student = student
+
+        if use_swapnet:
+            INPUT_SHAPE = (3, 32, 32)
+
+            assert teacher is not None, "Teacher model is not loaded."
+            assert student is not None, "Student model is not loaded."
+            swapnet = SwapNet(
+                teacher=teacher,
+                student=student,
+                input_shape=INPUT_SHAPE,
+            )
+            e_set.swapnet = swapnet
 
         return e_set
 

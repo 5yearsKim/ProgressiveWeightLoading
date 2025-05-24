@@ -10,8 +10,13 @@ def parse_args():
         "-m", "--model-type",
         type=str,
         required=True,
-        choices=["resnet-teacher", "resnet-student", "lenet5-teacher", "lenet5-student", "vgg-teacher", "vgg-student"],
-        help="Model type: teacher/student variant of ResNet or LeNet5",
+        choices=[
+            "resnet-teacher", "resnet-student",
+            "lenet5-teacher", "lenet5-student",
+            "vgg-teacher", "vgg-student",
+            "vit-teacher", "vit-student",
+        ],
+        help="Model type: teacher/student variant"
     )
     parser.add_argument(
         "-d", "--data-type",
@@ -103,6 +108,37 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
             depths=[2, 2, 3, 3],
             num_labels=num_labels,
         )
+        config.save_pretrained(save_path)
+
+    elif model_type == 'vit-teacher':
+        from pwl_model.models.vit import ViTConfig
+
+        config = ViTConfig(
+            image_size=32,
+            patch_size=4,
+            num_channels=3,
+            hidden_size=128, 
+            num_hidden_layers=6, 
+            num_attention_heads=8, 
+            intermediate_size=1024, 
+            num_labels=num_labels,
+        )
+
+        config.save_pretrained(save_path)
+    elif model_type == 'vit-student':
+        from pwl_model.models.vit import ViTConfig
+
+        config = ViTConfig(
+            image_size=32,            
+            patch_size=4,
+            num_channels=3, 
+            hidden_size=64,
+            num_hidden_layers=6,
+            num_attention_heads=4,
+            intermediate_size=512,   
+            num_labels=num_labels,
+        )
+
         config.save_pretrained(save_path)
 
     else:

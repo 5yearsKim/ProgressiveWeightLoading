@@ -22,6 +22,7 @@ class BlockNetMixin(ABC):
         self,
         x: torch.FloatTensor,
         output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> BaseModelOutput:
         """
         Forward pass of the model.

@@ -17,7 +17,7 @@ def parse_args():
 
     parser.add_argument(
         "--model_type",
-        choices=["lenet5", "resnet", "vgg"],
+        choices=["lenet5", "resnet", "vgg", "vit"],
         help="Type of model to train",
     )
     parser.add_argument(
