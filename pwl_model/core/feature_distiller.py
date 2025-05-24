@@ -39,7 +39,7 @@ class FeatureDistiller(nn.Module):
         alpha: float = 0.4,
         w_sync: float = 1,
         w_recon: float = 1,
-        w_cross: float = 0.5,
+        w_cross: float = 2,
         cross_mode: Literal["random", "all"] = "random",
     ):
         """
@@ -66,6 +66,15 @@ class FeatureDistiller(nn.Module):
 
         # etc
         self.cross_mode = cross_mode
+
+    def feature_distance(
+        self, feat1: torch.Tensor, feat2: torch.Tensor
+    ) -> torch.Tensor:
+        f1 = feat1.flatten(start_dim=1)
+        f2 = feat2.flatten(start_dim=1)
+        return (
+            self.mse(feat1, feat2) + (1.0 - F.cosine_similarity(f1, f2, dim=-1)).mean()
+        )
 
     def forward(
         self, pixel_values: torch.Tensor, labels: torch.LongTensor
@@ -108,8 +117,8 @@ class FeatureDistiller(nn.Module):
             feat_target = encoder(feat_t)
             feat_recon = decoder(feat_target)
 
-            loss_feat_sync += self.mse(feat_s, feat_target)
-            loss_feat_recon += self.mse(feat_t, feat_recon)
+            loss_feat_sync += self.feature_distance(feat_s, feat_target)
+            loss_feat_recon += self.feature_distance(feat_t, feat_recon)
 
         loss_feat_sync = self.w_sync * (loss_feat_sync / max(self.swapnet.num_feat, 1))
         loss_feat_recon = self.w_recon * (
