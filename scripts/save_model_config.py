@@ -129,7 +129,7 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         from pwl_model.models.vit import ViTConfig
 
         config = ViTConfig(
-            image_size=32,            
+            image_size=32, 
             patch_size=4,
             num_channels=3, 
             hidden_size=64,

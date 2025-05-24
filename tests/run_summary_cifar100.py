@@ -82,7 +82,7 @@ def run_block_vit_summary():
     model = model.to("cpu").eval()
 
     x = torch.randn(1, 3, 32, 32)  # batch size of 1
-    print(model(x))  # (1, 64, 128)
+    print(model(x).logits.shape)  # (1, 64, 128)
     summary(
         model,
         input_size=(1, 3, 32, 32),                    # (batch, C, H, W)

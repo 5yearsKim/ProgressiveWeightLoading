@@ -24,6 +24,16 @@ class FirstOutput(nn.Module):
         return out[0] if isinstance(out, tuple) else out
 
 
+class OutputPoller(nn.Module):
+    def __init__(self, module: nn.Module):
+        super().__init__()
+        self.module = module
+
+    def forward(self, x, *args, **kwargs):
+        pooled = x[:, 0]
+        return pooled
+
+
 class BlockViTConfig(ViTConfig):
     model_type = "block_vit"
 
@@ -69,11 +79,10 @@ class BlockViTModel(BlockNetMixin, BlockViTPreTrainedModel):
         last_block = blocks[-1]
 
         last_block.append(
-            nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps),
+            OutputPoller(
+                nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps),
+            )
         )
-        # last_block.append(
-        #     ViTPooler(self.config)
-        # )
 
         return blocks
 
@@ -101,19 +110,14 @@ class BlockViTForImageClassification(BlockViTPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs
     ):
-        outputs = self.vit(pixel_values, **kwargs)
-        pooled = (
-            outputs.pooler_output
-            if hasattr(outputs, "pooler_output")
-            else outputs.last_hidden_state[:, 0]
-        )
-        logits = self.classifier(pooled)
+        output = self.vit(pixel_values, **kwargs)
+        logits = self.classifier(output.last_hidden_state)
         loss = None
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            # hidden_states=outputs.hidden_states,
+            # attentions=outputs.attentions,
         )

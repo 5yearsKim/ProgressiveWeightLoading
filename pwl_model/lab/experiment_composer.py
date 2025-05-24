@@ -112,6 +112,7 @@ class ExperimentComposer:
                 teacher=teacher,
                 student=student,
                 input_shape=INPUT_SHAPE,
+                channel_last=model_type in ["vit"],
             )
             e_set.swapnet = swapnet
 

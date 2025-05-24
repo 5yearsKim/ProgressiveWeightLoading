@@ -11,9 +11,12 @@ class SwapNet(nn.Module):
         teacher: BlockNetMixin,
         student: BlockNetMixin,
         input_shape: tuple = (3, 32, 32),
+        channel_last: bool = False,
     ):
 
         super().__init__()
+
+        self.channel_last = channel_last
 
         self.teacher = teacher
         self.student = student
@@ -53,7 +56,11 @@ class SwapNet(nn.Module):
         self.decoders = nn.ModuleList([])
 
         for i, (feat_s, feat_t) in enumerate(zip(self._feat_s, self._feat_t)):
-            chan_t, chan_s = feat_t.shape[1], feat_s.shape[1]
+
+            if self.channel_last:
+                chan_t, chan_s = feat_t.shape[-1], feat_s.shape[-1]
+            else:
+                chan_t, chan_s = feat_t.shape[1], feat_s.shape[1]
 
             print(
                 f"Block {i}: teacher {chan_t} -> student {chan_s} ({feat_t.shape} -> {feat_s.shape})"
