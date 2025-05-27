@@ -1,11 +1,10 @@
 import argparse
+from pathlib import Path
 
-import mlflow
 import numpy as np
 import torch
-import torch.optim as optim
-from transformers import SchedulerType, Trainer, TrainingArguments
-from transformers.integrations import MLflowCallback
+from safetensors.torch import load_file
+from transformers import Trainer, TrainingArguments
 
 from pwl_model.lab import ExperimentComposer
 
@@ -17,7 +16,7 @@ def parse_args():
 
     parser.add_argument(
         "--model_type",
-        choices=["lenet5", "resnet", "vgg", "vit"],
+        choices=["vit"],
         help="Type of model to train",
     )
     parser.add_argument(
@@ -28,25 +27,20 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=200,
+        default=5,
         help="Number of training epochs",
     )
     parser.add_argument(
         "--lr",
         type=float,
-        default=5e-2,
+        default=5e-5,
         help="Learning rate for optimizer",
     )
     parser.add_argument(
         "--bs",
         type=int,
-        default=128,
+        default=64,
         help="Batch size per device",
-    )
-    parser.add_argument(
-        "--resume_from_checkpoint",
-        action="store_true",
-        help="Resume training from latest checkpoint",
     )
     parser.add_argument(
         "--is_sample",
@@ -57,6 +51,12 @@ def parse_args():
         "--experiment_name",
         type=str,
         help="MLflow experiment name",
+    )
+    parser.add_argument(
+        "--teacher_config_path",
+        type=str,
+        required=True,
+        help="Directory to save model config.",
     )
     parser.add_argument(
         "--pretrained_path",
@@ -84,44 +84,34 @@ def main():
     # device setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # MLflow configuration
-    mlflow.set_experiment(args.experiment_name)
-    mlflow.log_param("device", str(device))
-    mlflow.log_param("model_type", args.model_type)
-    mlflow.log_param("epochs", args.epochs)
-    mlflow.log_param("learning_rate", args.lr)
-    mlflow.log_param("batch_size", args.bs)
-
     e_composer = ExperimentComposer(
         model_type=args.model_type, dataset_name=args.data_type
     )
 
-    # prepare configuration and experiment
-    teacher_from = args.pretrained_path
-
     e_dset = e_composer.prepare_data()
 
     e_model = e_composer.prepare_model(
-        teacher_from=teacher_from,
+        teacher_from=args.teacher_config_path,
         student_from=None,
         use_swapnet=False,
     )
 
     model = e_model.teacher.to(device)
 
+    pretrained_path = Path(args.pretrained_path)
+    block_sd = load_file(pretrained_path / "model.safetensors")
+
+    for k in ("classifier.weight", "classifier.bias"):
+        if k in block_sd:
+            block_sd.pop(k)
+
+    loading = model.load_state_dict(block_sd, strict=False)
+    print("  missing keys:", loading.missing_keys)
+    print("  unexpected keys:", loading.unexpected_keys)
+
     ds_train = e_dset.train
     ds_eval = e_dset.eval
     collate_fn = e_dset.collate_fn
-
-    optimizer = optim.SGD(
-        model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4
-    )
-
-    epoch_steps = 50000 // args.bs
-
-    train_scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr / 20, 1e-5)
-    )
 
     if args.is_sample:
         ds_train = ds_train.select(range(500))
@@ -131,31 +121,25 @@ def main():
         preds = np.argmax(p.predictions, axis=1)
         return {"accuracy": (preds == p.label_ids).mean()}
 
-    # Training arguments
+    # training args
     training_args = TrainingArguments(
         output_dir=args.save_path,
         per_device_train_batch_size=args.bs,
         per_device_eval_batch_size=args.bs,
-        learning_rate=args.lr,
-        warmup_steps=500,
-        # lr_scheduler_type=SchedulerType.CONSTANT_WITH_WARMUP,
         num_train_epochs=args.epochs,
-        save_strategy="epoch",
-        logging_strategy="epoch",
+        learning_rate=args.lr,
+        weight_decay=0.01,
         eval_strategy="epoch",
-        report_to=["mlflow"],
-        logging_dir="./runs",
+        save_strategy="epoch",
+        logging_dir="./logs",
         load_best_model_at_end=True,
         metric_for_best_model="accuracy",
         greater_is_better=True,
         save_total_limit=1,
-        remove_unused_columns=False,
         dataloader_num_workers=8,
     )
 
-    print("Training start...")
-
-    # Trainer instantiation
+    # use the default collator (just stacks your tensors into batches)
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -163,8 +147,6 @@ def main():
         eval_dataset=ds_eval,
         data_collator=collate_fn,
         compute_metrics=compute_metrics,
-        callbacks=[MLflowCallback()],
-        optimizers=(optimizer, train_scheduler),
     )
 
     if args.eval_only:
@@ -173,7 +155,7 @@ def main():
         print(f"*** Eval metrics: {metrics} ***")
         return
 
-    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+    trainer.train()
 
 
 if __name__ == "__main__":

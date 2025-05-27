@@ -1,15 +1,17 @@
 import os
 import argparse
 from transformers import AutoModelForImageClassification, AutoImageProcessor
-from pwl_model.models.resnet import (
-    BlockResNetForImageClassification,
-    convert_hf_to_block_resnet,
-    check_weight_same_resnet,
-)
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Convert a HuggingFace ResNet to BlockResNet and save locally."
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        choices=["resnet", "vit"],
+        # default="microsoft/resnet-18",
+        help="model type",
     )
     parser.add_argument(
         "--pretrained_path",
@@ -38,21 +40,44 @@ def main():
 
     # 2) Convert its state dict to BlockResNet format
     hf_state_dict = hf_model.state_dict()
-    block_state_dict = convert_hf_to_block_resnet(hf_state_dict)
 
-    # 3) Instantiate BlockResNet and load weights
-    config = hf_model.config
-    block_model = BlockResNetForImageClassification(config)
-    block_model.load_state_dict(block_state_dict, strict=False)
+    if args.model_type == 'resnet':
+        from pwl_model.models.resnet import (
+            BlockResNetForImageClassification,
+            convert_hf_to_block_resnet,
+            check_weight_same_resnet,
+        )
+        block_state_dict = convert_hf_to_block_resnet(hf_state_dict)
 
-    # 4) Sanity check
-    check_weight_same_resnet(block_model.state_dict(), hf_model.state_dict())
+        config = hf_model.config
+        block_model = BlockResNetForImageClassification(config)
+        block_model.load_state_dict(block_state_dict, strict=False)
 
-    # 5) Save the converted model
+
+        check_weight_same_resnet(block_model.state_dict(), hf_model.state_dict())
+    elif args.model_type == 'vit':
+        from pwl_model.models.vit import (
+            BlockViTForImageClassification,
+            convert_hf_to_block_vit,
+            check_weight_same_vit,
+        )
+
+        block_state_dict = convert_hf_to_block_vit(hf_state_dict)
+
+        config = hf_model.config
+        block_model = BlockViTForImageClassification(config)
+        block_model.load_state_dict(block_state_dict)
+
+        check_weight_same_vit(block_model.state_dict(), hf_model.state_dict())
+
+    else:
+        raise ValueError(f'no model_type {args.model_type}')
+    
+
+
     os.makedirs(args.save_path, exist_ok=True)
     block_model.save_pretrained(args.save_path)
 
-    # 6) Optionally save the image processor
     if args.save_image_processor:
         hf_image_processor = AutoImageProcessor.from_pretrained(args.pretrained_path)
         hf_image_processor.save_pretrained(args.save_path)

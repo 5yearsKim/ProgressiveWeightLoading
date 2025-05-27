@@ -47,12 +47,13 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    e_composer = ExperimentComposer()
+    e_composer = ExperimentComposer(
+        model_type=args.model_type, dataset_name=args.data_type
+    )
 
     model_path = Path(args.model_path)
 
     e_model = e_composer.prepare_model(
-        args.model_type,
         teacher_from=model_path / "teacher_config",
         student_from=model_path / "student_config",
         use_swapnet=True,
@@ -67,7 +68,6 @@ def main():
     swapnet.eval()
 
     e_dset = e_composer.prepare_data(
-        args.data_type,
         use_train=False,
         use_eval=True,
     )

@@ -44,6 +44,16 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
     else:
         num_labels = 10
 
+    
+    hf_kwargs = {
+        "num_labels": num_labels,
+        "id2label": {
+            i: f"label{i}" for i in range(num_labels)
+        },  # optional, gives you human‐readable labels
+        "label2id": {f"label{i}": i for i in range(10)},  # optional
+        "ignore_mismatched_sizes": True,  # if your head shape changed
+    }
+
     os.makedirs(save_path, exist_ok=True)
 
     if model_type == "resnet-teacher":
@@ -111,33 +121,22 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         config.save_pretrained(save_path)
 
     elif model_type == 'vit-teacher':
-        from pwl_model.models.vit import ViTConfig
+        from pwl_model.models.vit import BlockViTConfig
 
-        config = ViTConfig(
-            image_size=32,
-            patch_size=4,
-            num_channels=3,
-            hidden_size=128, 
-            num_hidden_layers=6, 
-            num_attention_heads=8, 
-            intermediate_size=1024, 
-            num_labels=num_labels,
-        )
+        model_name = "WinKawaks/vit-tiny-patch16-224"
+
+        config = BlockViTConfig.from_pretrained(model_name, **hf_kwargs)
 
         config.save_pretrained(save_path)
-    elif model_type == 'vit-student':
-        from pwl_model.models.vit import ViTConfig
 
-        config = ViTConfig(
-            image_size=32, 
-            patch_size=4,
-            num_channels=3, 
-            hidden_size=64,
-            num_hidden_layers=6,
-            num_attention_heads=4,
-            intermediate_size=512,   
-            num_labels=num_labels,
-        )
+    elif model_type == 'vit-student':
+        from pwl_model.models.vit import BlockViTConfig
+
+        model_name = "WinKawaks/vit-tiny-patch16-224"
+
+        config = BlockViTConfig.from_pretrained(model_name)
+
+        config.num_labels = num_labels
 
         config.save_pretrained(save_path)
 

@@ -1,14 +1,15 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Literal, Optional
 
 import torch
 from torch import nn
-from transformers import PretrainedConfig
+from transformers import PretrainedConfig, PreTrainedModel
 
 from pwl_model.core import SwapNet
 
 from .custom_data import CIFAR10TorchDataset, CIFAR100TorchDataset
-from .utils import load_block_model
+from .utils import looks_like_checkpoint_dir
 
 
 @dataclass
@@ -27,117 +28,169 @@ class ExperimentSet:
 
 
 class ExperimentComposer:
+    def __init__(
+        self,
+        model_type: str,
+        dataset_name: Literal["cifar10", "cifar100"],
+    ) -> None:
+        self.model_type = model_type
+        self.dataset_name = dataset_name
+        self.input_shape = self._get_input_shape()
+        self.num_labels = 10 if dataset_name == "cifar10" else 100
+
+    def _get_input_shape(self) -> tuple:
+        if self.model_type == "vit":
+            return (3, 224, 224)
+        return (3, 32, 32)
+
+    def _load_block_model(
+        self,
+        model_from: str | None,
+        model_for_image_classification: PreTrainedModel,
+        model_config: PretrainedConfig,
+    ) -> PreTrainedModel | None:
+        if model_from is None:
+            return None
+
+        kwargs = {
+            # "num_labels": self.num_labels,
+            # "id2label": {
+            #     i: f"label{i}" for i in range(10)
+            # },  # optional, gives you human‐readable labels
+            # "label2id": {f"label{i}": i for i in range(10)},  # optional
+            # "ignore_mismatched_sizes": True,
+        }
+        try:
+            return model_for_image_classification.from_pretrained(model_from, **kwargs)
+        except:
+            try:
+                config = model_config.from_pretrained(
+                    Path(model_from) / "config.json", **kwargs
+                )
+                return model_for_image_classification(config)
+            except Exception as e:
+                print(e)
+                raise ValueError(f"Invalid model_from value: {model_from}")
+
     def prepare_model(
         self,
-        model_type: Literal["resnet", "lenet5"],
         teacher_from: str | PretrainedConfig | None = None,
         student_from: str | PretrainedConfig | None = None,
         use_swapnet: bool = True,
     ):
         e_set = ExperimentSet()
 
-        if model_type == "lenet5":
+        if self.model_type == "lenet5":
 
             from pwl_model.models.lenet5 import (
                 BlockLeNet5Config, BlockLeNet5ForImageClassification)
 
             # Create the teacher and student models
-            teacher = load_block_model(
-                teacher_from, BlockLeNet5ForImageClassification, BlockLeNet5Config
+            teacher = self._load_block_model(
+                teacher_from,
+                BlockLeNet5ForImageClassification,
+                BlockLeNet5Config,
+                num_labels=self.num_labels,
             )
-            student = load_block_model(
-                student_from, BlockLeNet5ForImageClassification, BlockLeNet5Config
+            student = self._load_block_model(
+                student_from,
+                BlockLeNet5ForImageClassification,
+                BlockLeNet5Config,
+                num_labels=self.num_labels,
             )
 
-        elif model_type == "resnet":
+        elif self.model_type == "resnet":
 
             from pwl_model.models.resnet import (
                 BlockResNetConfig, BlockResNetForImageClassification)
 
             # Create the teacher and student models
-            teacher = load_block_model(
-                teacher_from, BlockResNetForImageClassification, BlockResNetConfig
+            teacher = self._load_block_model(
+                self,
+                teacher_from,
+                BlockResNetForImageClassification,
+                BlockResNetConfig,
             )
-            student = load_block_model(
-                student_from, BlockResNetForImageClassification, BlockResNetConfig
+            student = self._load_block_model(
+                self, student_from, BlockResNetForImageClassification, BlockResNetConfig
             )
 
-        elif model_type == "vgg":
+        elif self.model_type == "vgg":
 
             from pwl_model.models.vgg import (BlockVGGConfig,
                                               BlockVGGForImageClassification)
 
             # Create the teacher and student models
-            teacher = load_block_model(
+            teacher = self._load_block_model(
                 teacher_from, BlockVGGForImageClassification, BlockVGGConfig
             )
-            student = load_block_model(
+            student = self._load_block_model(
                 student_from, BlockVGGForImageClassification, BlockVGGConfig
             )
-        elif model_type == "vit":
+        elif self.model_type == "vit":
             from pwl_model.models.vit import (BlockViTConfig,
                                               BlockViTForImageClassification)
 
             # Create the teacher and student models
-            teacher = load_block_model(
+            teacher = self._load_block_model(
                 teacher_from, BlockViTForImageClassification, BlockViTConfig
             )
-            student = load_block_model(
-                student_from, BlockViTForImageClassification, BlockViTConfig
-            )
-        elif model_type == "vit":
-            from pwl_model.models.vit import (BlockViTConfig,
-                                              BlockViTForImageClassification)
-
-            # Create the teacher and student models
-            teacher = load_block_model(
-                teacher_from, BlockViTForImageClassification, BlockViTConfig
-            )
-            student = load_block_model(
+            student = self._load_block_model(
                 student_from, BlockViTForImageClassification, BlockViTConfig
             )
 
         else:
-            raise ValueError(f"{model_type} not defined")
+            raise ValueError(f"{self.model_type} not defined")
 
         e_set.teacher = teacher
         e_set.student = student
 
         if use_swapnet:
-            INPUT_SHAPE = (3, 32, 32)
 
             assert teacher is not None, "Teacher model is not loaded."
             assert student is not None, "Student model is not loaded."
             swapnet = SwapNet(
                 teacher=teacher,
                 student=student,
-                input_shape=INPUT_SHAPE,
-                channel_last=model_type in ["vit"],
+                input_shape=self.input_shape,
+                channel_last=self.model_type in ["vit"],
             )
             e_set.swapnet = swapnet
 
         return e_set
 
     def prepare_data(
-        self, dataset_name: str, use_train: bool = True, use_eval: bool = True
+        self, use_train: bool = True, use_eval: bool = True
     ) -> ExperimentDataset:
         """
         Prepare the data for the PWL model.
         """
 
+        dataset_name = self.dataset_name
+
         d_set = ExperimentDataset(name=dataset_name)
 
         if dataset_name == "cifar100":
+            reshape_size = None if self.input_shape == (3, 32, 32) else self.input_shape
             if use_train:
-                d_set.train = CIFAR100TorchDataset(stage="train")
+                d_set.train = CIFAR100TorchDataset(
+                    stage="train", reshape_size=reshape_size
+                )
             if use_eval:
-                d_set.eval = CIFAR100TorchDataset(stage="eval")
+                d_set.eval = CIFAR100TorchDataset(
+                    stage="eval", reshape_size=reshape_size
+                )
 
         elif dataset_name == "cifar10":
+            reshape_size = None if self.input_shape == (3, 32, 32) else self.input_shape
             if use_train:
-                d_set.train = CIFAR10TorchDataset(stage="train")
+                d_set.train = CIFAR10TorchDataset(
+                    stage="train", reshape_size=reshape_size
+                )
             if use_eval:
-                d_set.eval = CIFAR10TorchDataset(stage="eval")
+                d_set.eval = CIFAR10TorchDataset(
+                    stage="eval", reshape_size=reshape_size
+                )
         else:
             raise ValueError(f"Dataset {dataset_name} not supported")
 

@@ -6,15 +6,6 @@ import torch
 StateDictT = OrderedDict[str, torch.Tensor]
 
 
-def convert_hf_to_block_resnet(hf_sd: StateDictT) -> StateDictT:
-    """
-    Convert a HuggingFace-style ResNet state_dict (hf_sd)
-    into the corresponding BlockResNet state_dict.
-    """
-
-    from typing import Any, Dict
-
-
 def convert_hf_to_block_resnet(hf_sd: StateDictT, convert_classfier=True) -> StateDictT:
     """
     Convert a HuggingFace-style ResNet state_dict (hf_sd)

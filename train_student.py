@@ -161,15 +161,16 @@ def main():
     mlflow.log_param("learning_rate", args.lr)
     mlflow.log_param("batch_size", args.bs)
 
-    e_composer = ExperimentComposer()
+    e_composer = ExperimentComposer(
+        model_type=args.model_type, dataset_name=args.data_type
+    )
 
     e_model = e_composer.prepare_model(
-        args.model_type,
         teacher_from=args.teacher_path,
         student_from=args.student_path,
     )
 
-    e_dset = e_composer.prepare_data(args.data_type)
+    e_dset = e_composer.prepare_data()
 
     swapnet = e_model.swapnet
 
