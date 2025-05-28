@@ -114,11 +114,19 @@ class FeatureDistiller(nn.Module):
             # encoder, decoder = self.encoders[i], self.decoders[i]
             encoder, decoder = self.swapnet.encoders[i], self.swapnet.decoders[i]
 
-            feat_target = encoder(feat_t)
-            feat_recon = decoder(feat_target)
+            enc_feat_t = encoder(feat_t)
+            dec_enc_feat_t = decoder(enc_feat_t)
 
-            loss_feat_sync += self.feature_distance(feat_s, feat_target)
-            loss_feat_recon += self.feature_distance(feat_t, feat_recon)
+            dec_feat_s = decoder(feat_s)
+            enc_dec_feat_s = encoder(dec_feat_s)
+
+            loss_feat_sync += self.feature_distance(
+                feat_s, enc_feat_t
+            ) + self.feature_distance(feat_t.detach(), dec_feat_s)
+
+            loss_feat_recon += self.feature_distance(
+                feat_t.detach(), dec_enc_feat_t
+            ) + self.feature_distance(feat_s, enc_dec_feat_s)
 
         loss_feat_sync = self.w_sync * (loss_feat_sync / max(self.swapnet.num_feat, 1))
         loss_feat_recon = self.w_recon * (

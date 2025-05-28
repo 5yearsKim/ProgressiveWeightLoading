@@ -106,13 +106,12 @@ class ExperimentComposer:
 
             # Create the teacher and student models
             teacher = self._load_block_model(
-                self,
                 teacher_from,
                 BlockResNetForImageClassification,
                 BlockResNetConfig,
             )
             student = self._load_block_model(
-                self, student_from, BlockResNetForImageClassification, BlockResNetConfig
+                student_from, BlockResNetForImageClassification, BlockResNetConfig
             )
 
         elif self.model_type == "vgg":
