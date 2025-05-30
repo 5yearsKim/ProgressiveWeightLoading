@@ -41,6 +41,9 @@ class BlockLeNet5Model(BlockNetMixin, BlockLeNet5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_embedder(self) -> nn.Module:
+        return nn.Identity()
+
     def get_blocks(self) -> list[BlockModule]:
         config = self.config
         lenet5_blocks = [
@@ -90,6 +93,11 @@ class BlockLeNet5ForImageClassification(BlockLeNet5PreTrainedModel):
     @property
     def blocks(self):
         return self.lenet.blocks
+
+    @property
+    def embedder(self):
+        return self.lenet.embedder
+
 
     def forward(
         self,

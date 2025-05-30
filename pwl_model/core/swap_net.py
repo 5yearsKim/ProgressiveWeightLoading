@@ -38,11 +38,15 @@ class SwapNet(nn.Module):
         with torch.no_grad():
             x_s = torch.zeros((1, *input_shape))
             x_t = torch.zeros((1, *input_shape))
+
+            x_s = self.student.embedder(x_s)
+            x_t = self.teacher.embedder(x_t)
+
             for i, (s_block, t_block) in enumerate(
                 zip(self.student.blocks, self.teacher.blocks)
             ):
                 if i == self.num_blocks - 1:
-                    break
+                    break # Last block is not tracked
                 x_s = s_block(x_s)
                 x_t = t_block(x_t)
                 self._feat_s.append(x_s)
@@ -83,6 +87,11 @@ class SwapNet(nn.Module):
         assert (
             len(from_teachers) == self.num_blocks
         ), "from_teacher must be a list of booleans with the same length as the number of blocks"
+
+        embedder = (
+            self.teacher.embedder if from_teachers[0] else self.student.embedder
+        )
+        x = embedder(x)
 
         for i in range(self.num_blocks):
             is_teacher = from_teachers[i]
@@ -137,6 +146,7 @@ class SwapNet(nn.Module):
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         return self._infer_block(
             x,
+            self.teacher.embedder,
             self.teacher.blocks,
             self.teacher.classifier,
             return_features=return_features,
@@ -147,6 +157,7 @@ class SwapNet(nn.Module):
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         return self._infer_block(
             x,
+            self.student.embedder,
             self.student.blocks,
             self.student.classifier,
             return_features=return_features,
@@ -155,12 +166,15 @@ class SwapNet(nn.Module):
     def _infer_block(
         self,
         x,
+        embedder: nn.Module,
         blocks: list[BlockModule],
         classifier: nn.Module,
         return_features: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, list[torch.Tensor]]:
         if return_features:
             features = []
+
+        x = embedder(x)
 
         for i, block in enumerate(blocks):
             x = block(x)

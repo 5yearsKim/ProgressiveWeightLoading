@@ -116,6 +116,10 @@ class BlockViTForImageClassification(BlockViTPreTrainedModel):
     def blocks(self) -> list[BlockModule]:
         return self.vit.blocks
 
+    @property
+    def embedder(self) -> nn.Module:
+        return self.vit.embedder
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,

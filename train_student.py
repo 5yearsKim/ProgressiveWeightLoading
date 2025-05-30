@@ -237,6 +237,7 @@ def main():
         greater_is_better=True,
         save_total_limit=1,
         remove_unused_columns=False,
+        dataloader_num_workers=4,
     )
 
     trainer = DistilTrainer(

@@ -89,6 +89,10 @@ class BlockVGGForImageClassification(BlockVGGPreTrainedModel):
     def blocks(self) -> list[BlockModule]:
         return self.vgg.blocks
 
+    @property
+    def embedder(self) -> nn.Module:
+        return self.vgg.embedder
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,

@@ -116,6 +116,10 @@ class BlockResNetForImageClassification(BlockResNetPreTrainedModel):
     def blocks(self) -> list[BlockModule]:
         return self.resnet.blocks
 
+    @property
+    def embedder(self) -> nn.Module:
+        return self.resnet.embedder
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
