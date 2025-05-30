@@ -8,13 +8,9 @@ from datasets import load_dataset
 #     streaming=True,
 # )
 # for validation split
-val_ds = load_dataset(
-    "mlx-vision/imagenet-1k",
-    split="validation",
-    use_auth_token=True,
-    streaming=True,
+ds = load_dataset(
+    # "mlx-vision/imagenet-1k",
+    "imagenet-1k"
 )
 
-item = next(val_ds)
-
-print(item)
+print(ds)

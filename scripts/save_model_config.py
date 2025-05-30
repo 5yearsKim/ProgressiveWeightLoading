@@ -22,7 +22,7 @@ def parse_args():
         "-d", "--data-type",
         type=str,
         required=True,
-        choices=["cifar100", "cifar10"],
+        choices=["cifar100", "cifar10", "imagenet"],
         help="Dataset type: CIFAR-100 or CIFAR-10",
     )
     return parser.parse_args()
@@ -41,8 +41,10 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
     # determine number of labels
     if data_type == "cifar100":
         num_labels = 100
-    else:
+    elif data_type == "cifar10":
         num_labels = 10
+    else:
+        num_labels = 1000
 
     
     hf_kwargs = {

@@ -8,7 +8,7 @@ from transformers import PretrainedConfig, PreTrainedModel
 
 from pwl_model.core import SwapNet
 
-from .custom_data import CIFAR10TorchDataset, CIFAR100TorchDataset
+from .custom_data import CIFAR10TorchDataset, CIFAR100TorchDataset, ImageNetDataset
 from .utils import looks_like_checkpoint_dir
 
 
@@ -31,7 +31,7 @@ class ExperimentComposer:
     def __init__(
         self,
         model_type: str,
-        dataset_name: Literal["cifar10", "cifar100"],
+        dataset_name: Literal["cifar10", "cifar100", "imagenet"],
     ) -> None:
         self.model_type = model_type
         self.dataset_name = dataset_name
@@ -52,20 +52,12 @@ class ExperimentComposer:
         if model_from is None:
             return None
 
-        kwargs = {
-            # "num_labels": self.num_labels,
-            # "id2label": {
-            #     i: f"label{i}" for i in range(10)
-            # },  # optional, gives you human‐readable labels
-            # "label2id": {f"label{i}": i for i in range(10)},  # optional
-            # "ignore_mismatched_sizes": True,
-        }
         try:
-            return model_for_image_classification.from_pretrained(model_from, **kwargs)
+            return model_for_image_classification.from_pretrained(model_from)
         except:
             try:
                 config = model_config.from_pretrained(
-                    Path(model_from) / "config.json", **kwargs
+                    Path(model_from) / "config.json",
                 )
                 return model_for_image_classification(config)
             except Exception as e:
@@ -190,6 +182,18 @@ class ExperimentComposer:
                 d_set.eval = CIFAR10TorchDataset(
                     stage="eval", reshape_size=reshape_size
                 )
+        elif dataset_name == "imagenet":
+            reshape_size = None if self.input_shape == (3, 224, 224) else self.input_shape
+
+            if use_train:
+                d_set.train = ImageNetDataset(
+                    stage="train", reshape_size=reshape_size
+                )
+            if use_eval:
+                d_set.eval = ImageNetDataset(
+                    stage="eval", reshape_size=reshape_size
+                )
+
         else:
             raise ValueError(f"Dataset {dataset_name} not supported")
 

@@ -28,7 +28,7 @@ def parse_args():
     )
     parser.add_argument(
         "--data_type",
-        choices=["cifar10", "cifar100"],
+        choices=["cifar10", "cifar100", "imagenet"],
         help="dataset to use for training",
     )
     parser.add_argument(
@@ -66,9 +66,8 @@ def parse_args():
     )
     parser.add_argument(
         "--resume_from_checkpoint",
-        type=bool,
-        default=True,
-        help="Batch size per device",
+        action="store_true", 
+        help="If set, resume training from the last checkpoint",
     )
     parser.add_argument(
         "--experiment_name",
@@ -78,6 +77,13 @@ def parse_args():
     parser.add_argument(
         "--is_sample",
         action="store_true",
+        help="Take only sample dataset for the development purpose",
+    )
+    parser.add_argument(
+        "--cross_mode",
+        type=str,
+        choices=["random", "all"],
+        default="random",
         help="Take only sample dataset for the development purpose",
     )
     return parser.parse_args()
@@ -197,7 +203,7 @@ def main():
         weight_decay=5e-4,
     )
 
-    epoch_steps = 50000 // args.bs
+    epoch_steps = len(ds_train) // args.bs
 
     train_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr / 20, 1e-5)
@@ -209,6 +215,7 @@ def main():
 
     distiller = FeatureDistiller(
         swapnet=swapnet,
+        cross_mode=args.cross_mode,
     )
 
     def compute_metrics(p: EvalPrediction):
@@ -237,7 +244,7 @@ def main():
         greater_is_better=True,
         save_total_limit=1,
         remove_unused_columns=False,
-        dataloader_num_workers=4,
+        dataloader_num_workers=6,
     )
 
     trainer = DistilTrainer(
@@ -251,7 +258,7 @@ def main():
         optimizers=(optimizer, train_scheduler),
     )
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
 
 if __name__ == "__main__":
