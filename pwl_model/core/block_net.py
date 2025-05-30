@@ -12,7 +12,15 @@ class BlockNetMixin(ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.embedder = self.get_embedder()
         self.blocks = nn.ModuleList(self.get_blocks())
+
+    @abstractmethod
+    def get_embedder(self) -> nn.Module:
+        """
+        Returns the embedding layer of the model.
+        """
+        raise NotImplementedError("get_embedder() must be implemented in subclasses")
 
     @abstractmethod
     def get_blocks(self) -> list[BlockModule]:
@@ -27,6 +35,9 @@ class BlockNetMixin(ABC):
         """
         Forward pass of the model.
         """
+
+        x = self.embedder(x)
+
         hidden_states = () if output_hidden_states else None
 
         for block in self.blocks:

@@ -18,14 +18,12 @@ class BlockResNetConfig(ResNetConfig):
         embedder_kernel_size=7,
         embedder_kernel_stride=2,
         embedder_use_pooler=True,
-        num_labels=100,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.embedder_kernel_size = embedder_kernel_size
         self.embedder_kernel_stride = embedder_kernel_stride
         self.embedder_use_pooler = embedder_use_pooler
-        self.num_labels = num_labels
 
 
 class BlockResNetPreTrainedModel(PreTrainedModel):
@@ -57,11 +55,13 @@ class BlockResNetModel(BlockNetMixin, BlockResNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_embedder(self) -> nn.Module:
+        return BlockResNetEmbeddings(self.config)
+
     def get_blocks(self) -> list[BlockModule]:
         config = self.config
         blocks = [
             BlockModule(
-                BlockResNetEmbeddings(config),
                 ResNetStage(
                     config,
                     config.embedding_size,

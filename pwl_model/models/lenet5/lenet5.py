@@ -12,7 +12,6 @@ class LeNet5Config(PretrainedConfig):
     def __init__(
         self,
         in_channels: int = 3,
-        num_labels: int = 10,
         cnn_channels: list[int] = [6, 16],
         fc_sizes: list[int] = [400, 120, 84],
         **kwargs,
@@ -24,7 +23,6 @@ class LeNet5Config(PretrainedConfig):
 
         super().__init__(**kwargs)
         self.in_channels = in_channels
-        self.num_labels = num_labels
         self.cnn_channels = cnn_channels
         self.fc_sizes = fc_sizes
 

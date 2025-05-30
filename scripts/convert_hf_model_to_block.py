@@ -55,6 +55,7 @@ def main():
 
 
         check_weight_same_resnet(block_model.state_dict(), hf_model.state_dict())
+
     elif args.model_type == 'vit':
         from pwl_model.models.vit import (
             BlockViTForImageClassification,
@@ -65,6 +66,8 @@ def main():
         block_state_dict = convert_hf_to_block_vit(hf_state_dict)
 
         config = hf_model.config
+        config.layers_per_block = 2
+
         block_model = BlockViTForImageClassification(config)
         block_model.load_state_dict(block_state_dict)
 

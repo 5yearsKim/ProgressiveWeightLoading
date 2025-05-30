@@ -136,7 +136,7 @@ def main():
         metric_for_best_model="accuracy",
         greater_is_better=True,
         save_total_limit=1,
-        dataloader_num_workers=8,
+        dataloader_num_workers=4,
     )
 
     # use the default collator (just stacks your tensors into batches)

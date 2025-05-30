@@ -56,36 +56,8 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
 
     os.makedirs(save_path, exist_ok=True)
 
-    if model_type == "resnet-teacher":
-        from pwl_model.models.resnet import BlockResNetConfig
 
-        config = BlockResNetConfig.from_pretrained("microsoft/resnet-18")
-        # teacher-specific settings
-        config.embedder_kernel_size = 3
-        config.embedder_kernel_stride = 1
-        config.embedder_use_pooler = False
-        config.downsample_in_first_stage = False
-        config.num_labels = num_labels
-        config.hidden_sizes = [32, 64, 128, 256]
-        config.depths = [2, 2, 2, 2]
-        config.save_pretrained(save_path)
-
-    elif model_type == "resnet-student":
-        from pwl_model.models.resnet import BlockResNetConfig
-
-        config = BlockResNetConfig.from_pretrained("microsoft/resnet-18")
-        # student-specific settings
-        config.embedder_kernel_size = 3
-        config.embedder_kernel_stride = 1
-        config.embedder_use_pooler = False
-        config.downsample_in_first_stage = False
-        config.num_labels = num_labels
-        # config.hidden_sizes = [32, 64, 128, 256]
-        config.hidden_sizes = [16, 32, 64, 128]
-        config.depths = [1, 1, 1, 1]
-        config.save_pretrained(save_path)
-
-    elif model_type == "lenet5-teacher":
+    if model_type == "lenet5-teacher":
         from pwl_model.models.lenet5 import BlockLeNet5Config
 
         config = BlockLeNet5Config(
@@ -101,23 +73,55 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         # lenet5 config doesn't need pretrained, just instantiate
         config = BlockLeNet5Config(cnn_channels=[3, 8], fc_sizes=[200, 120, 84], num_labels=num_labels)
         config.save_pretrained(save_path)
+
     elif model_type == "vgg-teacher":
         from pwl_model.models.vgg import BlockVGGConfig
 
         config = BlockVGGConfig(
-            hidden_sizes=[64, 128, 256, 512],
-            depths=[2, 2, 3, 3],
+            hidden_sizes=[64, 128, 256, 512, 512],
+            depths=[2, 2, 3, 3, 3],
             num_labels=num_labels,
         )
         config.save_pretrained(save_path)
+
     elif model_type == "vgg-student":
         from pwl_model.models.vgg import BlockVGGConfig
 
         config = BlockVGGConfig(
-            hidden_sizes=[16, 32, 64, 128],
-            depths=[2, 2, 3, 3],
+            hidden_sizes=[16, 32, 64, 128, 128],
+            depths=[2, 2, 2, 2, 2],
             num_labels=num_labels,
         )
+        config.save_pretrained(save_path)
+
+
+    elif model_type == "resnet-teacher":
+        from pwl_model.models.resnet import BlockResNetConfig
+
+        config = BlockResNetConfig.from_pretrained("microsoft/resnet-18")
+        # teacher-specific settings
+        config.embedder_kernel_size = 3
+        config.embedder_kernel_stride = 1
+        config.embedder_use_pooler = False
+        config.downsample_in_first_stage = False
+        config.num_labels = num_labels
+        config.hidden_sizes = [32, 64, 128, 256]
+        config.depths = [3, 4, 6, 3]
+        config.save_pretrained(save_path)
+
+    elif model_type == "resnet-student":
+        from pwl_model.models.resnet import BlockResNetConfig
+
+        config = BlockResNetConfig.from_pretrained("microsoft/resnet-18")
+        # student-specific settings
+        config.embedder_kernel_size = 3
+        config.embedder_kernel_stride = 1
+        config.embedder_use_pooler = False
+        config.downsample_in_first_stage = False
+        config.num_labels = num_labels
+        # config.hidden_sizes = [32, 64, 128, 256]
+        config.hidden_sizes = [16, 32, 64, 128]
+        config.depths = [2, 2, 2, 2]
         config.save_pretrained(save_path)
 
     elif model_type == 'vit-teacher':
@@ -127,6 +131,13 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
 
         config = BlockViTConfig.from_pretrained(model_name, **hf_kwargs)
 
+        config.hidden_size = 192
+        config.num_hidden_layers = 12
+        config.intermediate_size = 768
+
+        config.layers_per_block = 2
+        config.num_labels = num_labels
+
         config.save_pretrained(save_path)
 
     elif model_type == 'vit-student':
@@ -134,9 +145,14 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
 
         model_name = "WinKawaks/vit-tiny-patch16-224"
 
-        config = BlockViTConfig.from_pretrained(model_name)
+        config = BlockViTConfig.from_pretrained(model_name, **hf_kwargs)
 
-        config.num_labels = num_labels
+
+        config.hidden_size = 192
+        config.num_hidden_layers = 6 
+        config.intermediate_size = 768
+
+        config.layers_per_block = 1 
 
         config.save_pretrained(save_path)
 

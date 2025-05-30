@@ -65,7 +65,7 @@ def run_block_vit_summary():
     from pwl_model.models.vit import BlockViTConfig, BlockViTForImageClassification, BlockViTModel
 
     model_name = "WinKawaks/vit-tiny-patch16-224"
-    config = BlockViTConfig.from_pretrained(model_name)
+    config = BlockViTConfig.from_pretrained(model_name, layers_per_block=2)
        
 
     model = BlockViTForImageClassification(config)
@@ -90,7 +90,7 @@ def run_compare_block_vit():
     from transformers import ViTConfig, ViTForImageClassification
 
     model_name = "WinKawaks/vit-tiny-patch16-224"
-    config = BlockViTConfig.from_pretrained(model_name)
+    config = BlockViTConfig.from_pretrained(model_name, layers_per_block=2)
 
     x = torch.zeros([1, 3, 224, 224])       
 

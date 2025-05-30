@@ -14,7 +14,6 @@ class BlockVGGConfig(PretrainedConfig):
         in_channels: int = 3,
         hidden_sizes: list[int] = [64, 128, 256, 512, 512],
         depths: list[int] = [2, 2, 3, 3, 3],
-        num_labels: int = 1000,
         pool_kernel: int = 2,
         pool_stride: int = 2,
         **kwargs,
@@ -23,7 +22,6 @@ class BlockVGGConfig(PretrainedConfig):
         self.in_channels = in_channels
         self.hidden_sizes = hidden_sizes
         self.depths = depths
-        self.num_labels = num_labels
         self.pool_kernel = pool_kernel
         self.pool_stride = pool_stride
 
@@ -38,6 +36,9 @@ class BlockVGGModel(BlockNetMixin, BlockVGGPreTrainedModel):
         super().__init__(config)
         self.post_init()
 
+    def get_embedder(self) -> nn.Module:
+        return nn.Identity()  # VGG does not have a separate embedder
+
     def get_blocks(self) -> list[BlockModule]:
         cfg = self.config
         blocks: list[BlockModule] = []
@@ -51,6 +52,7 @@ class BlockVGGModel(BlockNetMixin, BlockVGGPreTrainedModel):
                 convs.append(
                     nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
                 )
+                convs.append(nn.BatchNorm2d(out_channels))        # ← add this
                 convs.append(nn.ReLU(inplace=True))
                 in_channels = out_channels
             # pooling layer

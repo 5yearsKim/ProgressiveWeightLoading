@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=200,
+        default=160,
         help="Number of training epochs",
     )
     parser.add_argument(
@@ -150,7 +150,7 @@ def main():
         greater_is_better=True,
         save_total_limit=1,
         remove_unused_columns=False,
-        dataloader_num_workers=8,
+        dataloader_num_workers=4,
     )
 
     print("Training start...")

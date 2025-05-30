@@ -6,46 +6,52 @@ import torch
 StateDictT = OrderedDict[str, torch.Tensor]
 
 
-def convert_hf_to_block_vit(hf_sd: StateDictT, convert_classifier=True) -> StateDictT:
+def convert_hf_to_block_vit(
+    hf_sd: StateDictT,
+    convert_classifier: bool = True
+) -> StateDictT:
     """
-    Convert a HuggingFace-style ResNet state_dict (hf_sd)
-    into the corresponding BlockResNet state_dict.
+    Convert a HuggingFace ViTForImageClassification state_dict (hf_sd)
+    into the corresponding BlockViTForImageClassification layout.
     """
-    blk_sd: StateDictT = {}
+    blk_sd: StateDictT = OrderedDict()
 
     for k, v in hf_sd.items():
-        # 1) embeddings → blocks[0][0]
+        # 1) Embeddings → vit.embedder
         if k.startswith("vit.embeddings."):
-            suffix = k[len("vit.embeddings.") :]
-            new_key = f"vit.blocks.0.0.{suffix}"
+            suffix = k[len("vit.embeddings."):]
+            new_key = f"vit.embedder.{suffix}"
 
-        # 2) encoder layers → blocks[i]
+        # 2) Patch-proj & norm under embeddings
+        elif k.startswith("vit.embeddings.patch_embeddings.projection."):
+            suffix = k[len("vit.embeddings.patch_embeddings.projection."):]
+            new_key = f"vit.embedder.patch_embeddings.projection.{suffix}"
+        elif k.startswith("vit.embeddings.patch_embeddings.norm."):
+            suffix = k[len("vit.embeddings.patch_embeddings.norm."):]
+            new_key = f"vit.embedder.patch_embeddings.norm.{suffix}"
+
+        # 3) Encoder layers → blocks[i//2].[i%2].module
         elif k.startswith("vit.encoder.layer."):
             m = re.match(r"vit\.encoder\.layer\.(\d+)\.(.*)", k)
             if not m:
                 continue
             layer_idx = int(m.group(1))
             suffix = m.group(2)
+            blk_idx = layer_idx // 2
+            in_blk  = layer_idx % 2
+            new_key = f"vit.blocks.{blk_idx}.{in_blk}.module.{suffix}"
 
-            # layer 0 is in blocks[0][1]
-            if layer_idx == 0:
-                new_key = f"vit.blocks.0.1.module.{suffix}"
-            else:
-                # layers 1–11 are in blocks[1..11][0]
-                new_key = f"vit.blocks.{layer_idx}.0.module.{suffix}"
-
-        # 3) post‐encoder layernorm → blocks[11][1]
+        # 4) Post-encoder LayerNorm → blocks[5][2].module
         elif k.startswith("vit.layernorm."):
-            suffix = k[len("vit.layernorm.") :]
-            new_key = f"vit.blocks.11.1.module.{suffix}"
+            suffix  = k[len("vit.layernorm."):]
+            new_key = f"vit.blocks.5.2.module.{suffix}"
 
-        # 4) classifier → same name (optional)
-        elif k.startswith("classifier.") and convert_classifier:
+        # 5) Classifier → passthrough
+        elif convert_classifier and k.startswith("classifier."):
             new_key = k
 
         else:
-            print("dropping key: ", k)
-            # drop any other keys (e.g. config, unused)
+            # drop everything else
             continue
 
         blk_sd[new_key] = v
@@ -59,41 +65,35 @@ def check_weight_same_vit(
     atol: float = 1e-6,
 ) -> None:
     """
-    Check if the weights in the BlockResNet state_dict (block_sd)
-    are the same as those in the HuggingFace state_dict (hf_sd).
+    Verify that block_sd matches hf_sd under the block layout.
+    Raises if any keys mismatch or any tensor differs by > atol.
     """
+    # 1) convert HF → block layout
+    converted = convert_hf_to_block_vit(hf_sd, convert_classifier=True)
 
-    # Convert the HF state dict to the block structure
-    converted_hf_sd = convert_hf_to_block_vit(hf_sd)
+    # 2) compare key sets
+    b_keys = set(block_sd.keys())
+    h_keys = set(converted.keys())
+    if b_keys != h_keys:
+        missing    = b_keys - h_keys
+        unexpected = h_keys - b_keys
+        raise ValueError(
+            f"Key mismatch:\n"
+            f"  Missing in converted:   {missing}\n"
+            f"  Unexpected in converted: {unexpected}"
+        )
 
-    # Key sets
-    block_keys = set(block_sd.keys())
-    hf_keys = set(converted_hf_sd.keys())
+    # 3) compare values
+    diffs = []
+    for k in sorted(b_keys):
+        t1 = block_sd[k]
+        t2 = converted[k]
+        if not torch.allclose(t1, t2, atol=atol):
+            diffs.append((k, (t1 - t2).abs().max().item()))
 
-    # print('------block model-------')
-    # print(block_keys)
-    # print('------hf model-------')
-    # print(hf_keys)
+    if diffs:
+        msg = "\n".join(f"{k}: max diff = {d:.3e}" for k, d in diffs[:10])
+        more = f"... and {len(diffs)-10} more" if len(diffs) > 10 else ""
+        raise RuntimeError(f"{len(diffs)} tensors differ:\n{msg}\n{more}")
 
-    for b_key, h_key in zip(sorted(block_keys), sorted(hf_keys)):
-        # print(b_key, h_key)
-        if b_key != h_key:
-            raise ValueError(f"Key mismatch: b( {b_key} )vs h ( {h_key}) ")
-
-    # Compare tensor values for common keys
-    mismatches = []
-    for key in sorted(block_keys):
-        t_block = block_sd[key]
-        # print("key:", key)
-        t_hf = converted_hf_sd[key]
-        if not torch.allclose(t_block, t_hf, atol=atol):
-            max_diff = (t_block - t_hf).abs().max().item()
-            mismatches.append((key, max_diff))
-
-    if mismatches:
-        print(f"❌ Found {len(mismatches)} mismatched tensor(s):")
-        for key, diff in mismatches[:10]:
-            print(f"  {key}: max abs diff = {diff:.3e}")
-        if len(mismatches) > 10:
-            print(f"  ...and {len(mismatches) - 10} more mismatches.")
-    print("Weight comparison complete.")
+    print("✅ All weights match within atol!")

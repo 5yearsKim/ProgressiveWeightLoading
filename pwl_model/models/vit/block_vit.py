@@ -37,6 +37,18 @@ class OutputPoller(nn.Module):
 class BlockViTConfig(ViTConfig):
     model_type = "block_vit"
 
+    def __init__(
+        self,
+        layers_per_block: int = 1,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.layers_per_block = layers_per_block
+
+        assert (
+            self.num_hidden_layers % self.layers_per_block == 0
+        ), f"num_hidden_layers ({self.num_hidden_layers}) must be divisible by layers_per_block ({self.layers_per_block})"
+
 
 class BlockViTPreTrainedModel(ViTPreTrainedModel):
     config_class = BlockViTConfig
@@ -57,23 +69,23 @@ class BlockViTModel(BlockNetMixin, BlockViTPreTrainedModel):
         super().__init__(config)
         self.post_init()
 
+    def get_embedder(self) -> nn.Module:
+        return ViTEmbeddings(self.config, use_mask_token=self.use_mask_token)
+
     def get_blocks(self) -> list[BlockModule]:
         # Wrap each transformer layer as a BlockModule
-        blocks = [
-            BlockModule(
-                ViTEmbeddings(self.config, use_mask_token=self.use_mask_token),
+        blocks = []
+
+        num_blocks = self.config.num_hidden_layers // self.config.layers_per_block
+
+        for i in range(num_blocks):
+            layers = [
                 FirstOutput(
                     ViTLayer(self.config),
-                ),
-            )
-        ]
-        for i in range(self.config.num_hidden_layers - 1):
+                ) for _ in range(self.config.layers_per_block)
+            ]
             blocks.append(
-                BlockModule(
-                    FirstOutput(
-                        ViTLayer(self.config),
-                    ),
-                )
+                BlockModule(*layers)
             )
 
         last_block = blocks[-1]
