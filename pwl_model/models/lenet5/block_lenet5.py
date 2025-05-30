@@ -98,7 +98,6 @@ class BlockLeNet5ForImageClassification(BlockLeNet5PreTrainedModel):
     def embedder(self):
         return self.lenet.embedder
 
-
     def forward(
         self,
         pixel_values: torch.FloatTensor,

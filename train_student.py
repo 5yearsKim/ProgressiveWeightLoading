@@ -66,7 +66,7 @@ def parse_args():
     )
     parser.add_argument(
         "--resume_from_checkpoint",
-        action="store_true", 
+        action="store_true",
         help="If set, resume training from the last checkpoint",
     )
     parser.add_argument(
@@ -242,7 +242,7 @@ def main():
         save_strategy="epoch",
         metric_for_best_model="accuracy",
         greater_is_better=True,
-        save_total_limit=1,
+        save_total_limit=2,
         remove_unused_columns=False,
         dataloader_num_workers=6,
     )

@@ -1,14 +1,19 @@
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
 import torch
+from datasets import Image as DatasetsImage
+from datasets import load_dataset
+from PIL import Image as PILImage
 from torch import nn
-from transformers import PretrainedConfig, PreTrainedModel
+from transformers import AutoImageProcessor, PretrainedConfig, PreTrainedModel
 
 from pwl_model.core import SwapNet
 
-from .custom_data import CIFAR10TorchDataset, CIFAR100TorchDataset, ImageNetDataset
+from .custom_data import (CIFAR10TorchDataset, CIFAR100TorchDataset,
+                          ImageNetDataset)
 from .utils import looks_like_checkpoint_dir
 
 
@@ -183,16 +188,50 @@ class ExperimentComposer:
                     stage="eval", reshape_size=reshape_size
                 )
         elif dataset_name == "imagenet":
-            reshape_size = None if self.input_shape == (3, 224, 224) else self.input_shape
+
+            ds = load_dataset("imagenet-1k")
+            ds = ds.cast_column("image", DatasetsImage(decode=False))
+
+            # 2. Prepare feature extractor / image processor
+            processor = AutoImageProcessor.from_pretrained(
+                # "WinKawaks/vit-tiny-patch16-224"
+                "google/vit-base-patch16-224-in21k",
+                use_fast=True,
+            )
+
+            def preprocess_fn(examples):
+
+                def _decode_image(b, dummy_size=(224, 224), dummy_color=(0, 0, 0)):
+                    # b is a dict with 'bytes' and/or 'path'
+                    try:
+                        img = PILImage.open(io.BytesIO(b["bytes"]))
+                    except Exception as e1:
+                        print("in-memory decode failed:", e1)
+                        try:
+                            img = PILImage.open(b["path"])
+                        except Exception as e2:
+                            print("disk decode failed:", e2)
+                            # give them a dummy RGB image instead
+                            img = PILImage.new("RGB", dummy_size, color=dummy_color)
+                    # finally, ensure it’s RGB
+                    return img.convert("RGB")
+
+                imgs = []
+                for b in examples["image"]:
+                    imgs.append(_decode_image(b))
+                out = processor(images=imgs, return_tensors="pt")
+                return {
+                    "pixel_values": out.pixel_values,  # shape (batch,3,H,W)
+                    "labels": examples["label"],  # list of ints
+                }
+
+            train_ds = ds["train"].with_transform(preprocess_fn)
+            eval_ds = ds["validation"].with_transform(preprocess_fn)
 
             if use_train:
-                d_set.train = ImageNetDataset(
-                    stage="train", reshape_size=reshape_size
-                )
+                d_set.train = train_ds
             if use_eval:
-                d_set.eval = ImageNetDataset(
-                    stage="eval", reshape_size=reshape_size
-                )
+                d_set.eval = eval_ds
 
         else:
             raise ValueError(f"Dataset {dataset_name} not supported")

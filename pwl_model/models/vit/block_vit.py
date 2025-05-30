@@ -82,11 +82,10 @@ class BlockViTModel(BlockNetMixin, BlockViTPreTrainedModel):
             layers = [
                 FirstOutput(
                     ViTLayer(self.config),
-                ) for _ in range(self.config.layers_per_block)
+                )
+                for _ in range(self.config.layers_per_block)
             ]
-            blocks.append(
-                BlockModule(*layers)
-            )
+            blocks.append(BlockModule(*layers))
 
         last_block = blocks[-1]
 
@@ -124,7 +123,7 @@ class BlockViTForImageClassification(BlockViTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: torch.LongTensor | None = None,
-        **kwargs
+        **kwargs,
     ):
         output = self.vit(pixel_values, **kwargs)
         logits = self.classifier(output.last_hidden_state)

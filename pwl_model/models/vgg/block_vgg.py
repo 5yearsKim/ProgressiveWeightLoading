@@ -52,7 +52,7 @@ class BlockVGGModel(BlockNetMixin, BlockVGGPreTrainedModel):
                 convs.append(
                     nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
                 )
-                convs.append(nn.BatchNorm2d(out_channels))        # ← add this
+                convs.append(nn.BatchNorm2d(out_channels))  # ← add this
                 convs.append(nn.ReLU(inplace=True))
                 in_channels = out_channels
             # pooling layer

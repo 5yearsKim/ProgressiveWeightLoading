@@ -90,8 +90,8 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         from pwl_model.models.vgg import BlockVGGConfig
 
         config = BlockVGGConfig(
-            hidden_sizes=[32, 64, 128, 256, 256],
-            depths=[2, 2, 2, 2, 2],
+            hidden_sizes=[64, 128, 256, 512, 512],
+            depths=[1, 1, 1, 1, 1],
             num_labels=num_labels,
         )
         config.save_pretrained(save_path)

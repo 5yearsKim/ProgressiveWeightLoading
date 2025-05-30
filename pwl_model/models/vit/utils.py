@@ -7,8 +7,7 @@ StateDictT = OrderedDict[str, torch.Tensor]
 
 
 def convert_hf_to_block_vit(
-    hf_sd: StateDictT,
-    convert_classifier: bool = True
+    hf_sd: StateDictT, convert_classifier: bool = True
 ) -> StateDictT:
     """
     Convert a HuggingFace ViTForImageClassification state_dict (hf_sd)
@@ -19,15 +18,15 @@ def convert_hf_to_block_vit(
     for k, v in hf_sd.items():
         # 1) Embeddings → vit.embedder
         if k.startswith("vit.embeddings."):
-            suffix = k[len("vit.embeddings."):]
+            suffix = k[len("vit.embeddings.") :]
             new_key = f"vit.embedder.{suffix}"
 
         # 2) Patch-proj & norm under embeddings
         elif k.startswith("vit.embeddings.patch_embeddings.projection."):
-            suffix = k[len("vit.embeddings.patch_embeddings.projection."):]
+            suffix = k[len("vit.embeddings.patch_embeddings.projection.") :]
             new_key = f"vit.embedder.patch_embeddings.projection.{suffix}"
         elif k.startswith("vit.embeddings.patch_embeddings.norm."):
-            suffix = k[len("vit.embeddings.patch_embeddings.norm."):]
+            suffix = k[len("vit.embeddings.patch_embeddings.norm.") :]
             new_key = f"vit.embedder.patch_embeddings.norm.{suffix}"
 
         # 3) Encoder layers → blocks[i//2].[i%2].module
@@ -38,12 +37,12 @@ def convert_hf_to_block_vit(
             layer_idx = int(m.group(1))
             suffix = m.group(2)
             blk_idx = layer_idx // 2
-            in_blk  = layer_idx % 2
+            in_blk = layer_idx % 2
             new_key = f"vit.blocks.{blk_idx}.{in_blk}.module.{suffix}"
 
         # 4) Post-encoder LayerNorm → blocks[5][2].module
         elif k.startswith("vit.layernorm."):
-            suffix  = k[len("vit.layernorm."):]
+            suffix = k[len("vit.layernorm.") :]
             new_key = f"vit.blocks.5.2.module.{suffix}"
 
         # 5) Classifier → passthrough
@@ -75,7 +74,7 @@ def check_weight_same_vit(
     b_keys = set(block_sd.keys())
     h_keys = set(converted.keys())
     if b_keys != h_keys:
-        missing    = b_keys - h_keys
+        missing = b_keys - h_keys
         unexpected = h_keys - b_keys
         raise ValueError(
             f"Key mismatch:\n"

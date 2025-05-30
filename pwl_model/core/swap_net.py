@@ -46,7 +46,7 @@ class SwapNet(nn.Module):
                 zip(self.student.blocks, self.teacher.blocks)
             ):
                 if i == self.num_blocks - 1:
-                    break # Last block is not tracked
+                    break  # Last block is not tracked
                 x_s = s_block(x_s)
                 x_t = t_block(x_t)
                 self._feat_s.append(x_s)
@@ -88,9 +88,7 @@ class SwapNet(nn.Module):
             len(from_teachers) == self.num_blocks
         ), "from_teacher must be a list of booleans with the same length as the number of blocks"
 
-        embedder = (
-            self.teacher.embedder if from_teachers[0] else self.student.embedder
-        )
+        embedder = self.teacher.embedder if from_teachers[0] else self.student.embedder
         x = embedder(x)
 
         for i in range(self.num_blocks):

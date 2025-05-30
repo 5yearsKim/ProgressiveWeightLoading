@@ -1,7 +1,10 @@
+import random
 from abc import ABC, abstractmethod
 from typing import Literal
 
+from datasets import Image as HFDatasetsImage
 from datasets import load_dataset
+from PIL import Image as PILImage
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
@@ -124,48 +127,38 @@ class ImageNetDataset(Dataset):
     MEAN = (0.485, 0.456, 0.406)
     STD = (0.229, 0.224, 0.225)
     LABEL_KEY = "label"
-    IMAMGE_KEY = "image"
+    IMAGE_KEY = "image"
 
     def __init__(self, stage: Literal["train", "eval"], reshape_size=None):
-        assert stage in ["train", "eval", "test"], f"Invalid stage {stage}"
-        self.size = reshape_size or 224 
+        assert stage in ["train", "eval"], f"Invalid stage {stage}"
+        self.size = reshape_size or 224
+
+        split = "train" if stage == "train" else "validation"
+        ds = load_dataset("imagenet-1k", split=split, encoding="utf-16")
+
+        self.ds = ds
 
         transforms = [
             T.Resize(256),
             T.CenterCrop(self.size),
         ]
 
-        if reshape_size is not None:
-            transforms.append(T.Resize(self.size))
-
         if stage == "train":
-            self.ds = load_dataset("imagenet-1k", split="train")
-
             pad = (
                 self.size // 8
                 if isinstance(self.size, int)
                 else tuple(s // 8 for s in self.size)
             )
-
-            transforms.extend(
-                [
-                    T.RandomRotation(15),
-                    T.RandomHorizontalFlip(),
-                    T.RandomCrop(self.size, padding=pad, padding_mode="reflect"),
-                ]
-            )
-        elif stage == "eval":
-            self.ds = load_dataset("imagenet-1k", split="validation")
-        else:
-            raise ValueError(f"stage {stage!r} not supported")
-
-        transforms.extend(
-            [
-                T.ToTensor(),
-                T.Normalize(self.MEAN, self.STD),
+            transforms += [
+                T.RandomRotation(15),
+                T.RandomHorizontalFlip(),
+                T.RandomCrop(self.size, padding=pad, padding_mode="reflect"),
             ]
-        )
 
+        transforms += [
+            T.ToTensor(),
+            T.Normalize(self.MEAN, self.STD),
+        ]
         self.transform = T.Compose(transforms)
 
     def __len__(self):
@@ -173,9 +166,9 @@ class ImageNetDataset(Dataset):
 
     def __getitem__(self, i):
         item = self.ds[i]
-        img = item[self.IMAMGE_KEY].convert("RGB")
+        path = item[self.IMAGE_KEY]["path"]
+        img = PILImage.open(path).convert("RGB")
         return {
             "pixel_values": self.transform(img),
             "labels": item[self.LABEL_KEY],
         }
-
