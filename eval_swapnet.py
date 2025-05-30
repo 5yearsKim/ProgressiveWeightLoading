@@ -88,7 +88,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         collate_fn=collate_fn,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
     )
 

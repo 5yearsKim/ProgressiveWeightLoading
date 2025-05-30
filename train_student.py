@@ -180,8 +180,8 @@ def main():
 
     optimizer = optim.SGD(
         [
-            {"params": swapnet.encoders.parameters(), "lr": args.lr * 0.1},
-            {"params": swapnet.decoders.parameters(), "lr": args.lr * 0.1},
+            {"params": swapnet.encoders.parameters(), "lr": args.lr * 0.2},
+            {"params": swapnet.decoders.parameters(), "lr": args.lr * 0.2},
             {
                 "params": (
                     p

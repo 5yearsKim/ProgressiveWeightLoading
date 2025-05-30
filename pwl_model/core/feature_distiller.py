@@ -155,10 +155,18 @@ class FeatureDistiller(nn.Module):
         elif self.cross_mode == "random":
 
             def get_random_bool(n: int) -> list[bool]:
-                start = random.choice([True, False])
-                pivot = random.randint(1, n - 1)
-                rand_bool = [start] * pivot + [not start] * (n - pivot)
-                return rand_bool
+                if random.random() < 0.5:
+                    start = random.choice([True, False])
+                    pivot = random.randint(1, n - 1)
+                    rand_bool = [start] * pivot + [not start] * (n - pivot)
+                    return rand_bool
+                else:
+                    rand_bool = [random.choice([True, False]) for _ in range(n)]
+                    if len(set(rand_bool)) == 1:
+                        # all True or all False → pick one index to flip
+                        i = random.randrange(n)
+                        rand_bool[i] = not rand_bool[i]
+                    return rand_bool
 
             from_teachers = get_random_bool(self.swapnet.num_blocks)
 
