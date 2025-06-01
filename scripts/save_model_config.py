@@ -122,8 +122,8 @@ def save_config(model_type: str, data_type: str, save_path: str) -> None:
         config.downsample_in_first_stage = False
         config.num_labels = num_labels
         # config.hidden_sizes = [32, 64, 128, 256]
-        config.hidden_sizes = [16, 32, 64, 128]
-        config.depths = [2, 2, 2, 2]
+        config.hidden_sizes = [32, 64, 128, 256]
+        config.depths = [1, 1, 1, 1]
         config.save_pretrained(save_path)
 
     elif model_type == 'vit-teacher':

@@ -1,10 +1,12 @@
 import argparse
 import os
+from pathlib import Path
 
 import mlflow
 import numpy as np
 import torch
 import torch.optim as optim
+from safetensors.torch import load_file
 from transformers import (Trainer, TrainerCallback, TrainerControl,
                           TrainerState, TrainingArguments)
 from transformers.integrations import MLflowCallback
@@ -42,6 +44,12 @@ def parse_args():
         help="Path for the student config",
     )
     parser.add_argument(
+        "--student_pretrained_path",
+        type=str,
+        default=None,
+        help="Path for the student pretrained weight path",
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         help="Where to save distilled checkpoints",
@@ -57,6 +65,12 @@ def parse_args():
         type=float,
         default=5e-2,
         help="Initial learning rate",
+    )
+    parser.add_argument(
+        "--min_lr",
+        type=float,
+        default=1e-5,
+        help="minimum learning rate",
     )
     parser.add_argument(
         "--bs",
@@ -180,6 +194,30 @@ def main():
 
     swapnet = e_model.swapnet
 
+    if args.student_pretrained_path:
+
+        pretrained_path = Path(args.student_pretrained_path)
+        print("Loading student weight from ", pretrained_path)
+        block_sd = load_file(pretrained_path / "model.safetensors")
+
+        # 2) Extract only keys that start with "swapnet.student.", stripping that prefix:
+        prefix = "swapnet.student."
+        student_sd = {}
+        for full_key, tensor in block_sd.items():
+            if full_key.startswith(prefix):
+                new_key = full_key[len(prefix) :]
+                student_sd[new_key] = tensor
+
+        for k in ("classifier.weight", "classifier.bias"):
+            if k in student_sd:
+                student_sd.pop(k)
+
+        loading = swapnet.student.load_state_dict(student_sd, strict=False)
+        print("  missing keys:", loading.missing_keys)
+        print("  unexpected keys:", loading.unexpected_keys)
+
+
+
     ds_train = e_dset.train
     ds_eval = e_dset.eval
     collate_fn = e_dset.collate_fn
@@ -206,7 +244,7 @@ def main():
     epoch_steps = len(ds_train) // args.bs
 
     train_scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr / 20, 1e-5)
+        optimizer, T_max=epoch_steps * args.epochs, eta_min=min(args.lr / 20, args.min_lr)
     )
 
     if args.is_sample:
