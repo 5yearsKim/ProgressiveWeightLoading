@@ -28,6 +28,12 @@ def parse_args():
         choices=["cifar100", "cifar10"],
         help="Dataset type: CIFAR-100 or CIFAR-10",
     )
+    parser.add_argument(
+        "-D", "--depth",
+        type=int,
+	default=5,
+        help="depth",
+    )
     return parser.parse_args()
 
 def main():
@@ -37,7 +43,7 @@ def main():
         INPUT_SHAPE = (1, 3, 224, 224)
     else:
         INPUT_SHAPE = (1, 3, 32, 32)
-    DEPTH=5
+    DEPTH=args.depth
 
 
     target_path = Path(f"./ckpts/{args.model_type}-{args.data_type}/student/checkpoint-main")
