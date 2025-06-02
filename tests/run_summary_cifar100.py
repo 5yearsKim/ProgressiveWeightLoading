@@ -66,10 +66,18 @@ def run_block_vit_summary():
 
     model_name = "WinKawaks/vit-tiny-patch16-224"
     config = BlockViTConfig.from_pretrained(model_name, layers_per_block=2)
+
+
+    config.hidden_size = 192
+    config.num_hidden_layers = 4
+    config.intermediate_size = 768
+
+    config.layers_per_block = 1 
        
 
     model = BlockViTForImageClassification(config)
     model = model.to("cpu").eval()
+
 
 
 
@@ -126,5 +134,5 @@ if __name__ == "__main__":
     # run_block_resnet_summary()
     # run_vits_summary()
     # run_block_vgg_summary()
-    # run_block_vit_summary()
-    run_compare_block_vit()
+    run_block_vit_summary()
+    # run_compare_block_vit()
